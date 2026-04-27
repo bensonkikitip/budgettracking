@@ -1,0 +1,12 @@
+Description,,Summary Amt.
+Beginning balance as of 03/01/2026,,"10,000.00"
+Total credits,,"2,500.00"
+Total debits,,"-500.00"
+Ending balance as of 03/31/2026,,"12,000.00"
+
+Date,Description,Amount,Running Bal.
+03/01/2026,Beginning balance as of 03/01/2026,,"10,000.00"
+03/05/2026,"Zelle payment from Alice Smith","500.00","10,500.00"
+03/10/2026,"SUPERMARKET STORE 101 ANYTOWN CA","-75.50","10,424.50"
+03/15/2026,"ONLINE PAYMENT CREDIT CARD","-424.50","10,000.00"
+03/20/2026,"PAYROLL DEPOSIT","2,000.00","12,000.00"

@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Financial data — NEVER commit real CSV exports or the local SQLite DB
+local-data/
+*.csv
+*.db
+# Exception: synthetic test fixtures are safe to commit (no real financial data)
+!tests/fixtures/*.csv

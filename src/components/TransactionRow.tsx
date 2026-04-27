@@ -1,0 +1,80 @@
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Transaction } from '../db/queries';
+import { centsToDollars } from '../domain/money';
+
+interface Props {
+  transaction: Transaction;
+  accountBadge?: string;
+}
+
+export function TransactionRow({ transaction, accountBadge }: Props) {
+  const isPositive = transaction.amount_cents >= 0;
+  return (
+    <View style={styles.row}>
+      <View style={styles.left}>
+        <Text style={styles.description} numberOfLines={1}>
+          {transaction.description}
+        </Text>
+        <View style={styles.meta}>
+          <Text style={styles.date}>{transaction.date}</Text>
+          {accountBadge && <Text style={styles.badge}>{accountBadge}</Text>}
+          {!!transaction.is_pending && <Text style={styles.pending}>Pending</Text>}
+        </View>
+      </View>
+      <Text style={[styles.amount, isPositive ? styles.positive : styles.negative]}>
+        {centsToDollars(transaction.amount_cents)}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#d1d1d6',
+  },
+  left: {
+    flex: 1,
+    marginRight: 8,
+  },
+  description: {
+    fontSize: 15,
+    color: '#1c1c1e',
+    marginBottom: 3,
+  },
+  meta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  date: {
+    fontSize: 12,
+    color: '#8e8e93',
+  },
+  badge: {
+    fontSize: 11,
+    color: '#fff',
+    backgroundColor: '#636366',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  pending: {
+    fontSize: 11,
+    color: '#ff9f0a',
+    fontStyle: 'italic',
+  },
+  amount: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  positive: { color: '#2a9d5c' },
+  negative: { color: '#1c1c1e' },
+});
