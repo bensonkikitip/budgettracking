@@ -92,7 +92,11 @@ export async function getAllAccounts(): Promise<Account[]> {
 
 export async function deleteAccount(id: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`DELETE FROM accounts WHERE id = ?`, id);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`DELETE FROM transactions   WHERE account_id = ?`, id);
+    await db.runAsync(`DELETE FROM import_batches WHERE account_id = ?`, id);
+    await db.runAsync(`DELETE FROM accounts       WHERE id = ?`, id);
+  });
 }
 
 // --- Import batches ---

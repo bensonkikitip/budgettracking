@@ -53,6 +53,9 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
   const db = await SQLite.openDatabaseAsync('budgetapp.db');
 
+  // SQLite disables FK constraints by default — enable them so ON DELETE CASCADE works
+  await db.execAsync('PRAGMA foreign_keys = ON');
+
   // Run base schema (idempotent via CREATE TABLE IF NOT EXISTS)
   await db.execAsync(INIT_SQL);
 
@@ -91,6 +94,17 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       citiDefault,
     );
     await db.execAsync('PRAGMA user_version = 3');
+  }
+
+  if (version < 4) {
+    // Clean up orphaned rows left by accounts that were deleted without FK constraints active
+    await db.execAsync(
+      `DELETE FROM transactions   WHERE account_id    NOT IN (SELECT id FROM accounts)`,
+    );
+    await db.execAsync(
+      `DELETE FROM import_batches WHERE account_id    NOT IN (SELECT id FROM accounts)`,
+    );
+    await db.execAsync('PRAGMA user_version = 4');
   }
 
   _db = db;
