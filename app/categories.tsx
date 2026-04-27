@@ -1,13 +1,11 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Alert,
+  StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Category, getAllCategories } from '../src/db/queries';
-import { autoApplyAllRules } from '../src/domain/rules-engine';
-import { writeBackup } from '../src/db/backup';
 import { Sloth } from '../src/components/Sloth';
 import { colors, font, spacing, radius } from '../src/theme';
 
@@ -16,7 +14,6 @@ export default function CategoriesScreen() {
   const insets  = useSafeAreaInsets();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading,    setLoading]    = useState(true);
-  const [applying,   setApplying]   = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -26,22 +23,6 @@ export default function CategoriesScreen() {
     })();
     return () => { active = false; };
   }, []));
-
-  async function handleApplyAll() {
-    setApplying(true);
-    try {
-      const count = await autoApplyAllRules();
-      void writeBackup();
-      Alert.alert(
-        'All done!',
-        count === 0
-          ? "I didn't find any new transactions to categorize. All caught up!"
-          : `I categorized ${count} transaction${count === 1 ? '' : 's'} across all your accounts.`,
-      );
-    } finally {
-      setApplying(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -63,7 +44,7 @@ export default function CategoriesScreen() {
           ),
         }}
       />
-      <View style={[styles.container, { paddingBottom: insets.bottom + spacing.lg }]}>
+      <View style={[styles.container, { paddingBottom: insets.bottom }]}>
         <FlatList
           data={categories}
           keyExtractor={c => c.id}
@@ -89,20 +70,6 @@ export default function CategoriesScreen() {
             </View>
           }
         />
-
-        {categories.length > 0 && (
-          <TouchableOpacity
-            style={[styles.applyBtn, applying && styles.applyBtnDisabled]}
-            onPress={handleApplyAll}
-            disabled={applying}
-            activeOpacity={0.85}
-          >
-            {applying
-              ? <ActivityIndicator color={colors.textOnColor} />
-              : <Text style={styles.applyBtnText}>Apply All Rules to Transactions</Text>
-            }
-          </TouchableOpacity>
-        )}
       </View>
     </>
   );
@@ -134,11 +101,4 @@ const styles = StyleSheet.create({
     textAlign: 'center', lineHeight: 22,
   },
 
-  applyBtn: {
-    marginHorizontal: spacing.md, marginTop: spacing.md,
-    backgroundColor: colors.primary, borderRadius: radius.full,
-    paddingVertical: 16, alignItems: 'center',
-  },
-  applyBtnDisabled: { opacity: 0.6 },
-  applyBtnText: { fontFamily: font.bold, fontSize: 16, color: colors.textOnColor },
 });
