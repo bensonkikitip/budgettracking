@@ -2,15 +2,16 @@ import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   Modal, TextInput, StyleSheet, SafeAreaView,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Rule, Category, MatchType,
   getRulesForAccount, getAllCategories,
-  insertRule, deleteRule, reorderRules,
+  insertRule, deleteRule, reorderRules, insertCategory,
 } from '../../../src/db/queries';
+import { CATEGORY_COLORS } from '../../../src/domain/category-colors';
 import { Sloth } from '../../../src/components/Sloth';
 import { colors, font, spacing, radius } from '../../../src/theme';
 import * as Crypto from 'expo-crypto';
@@ -30,11 +31,16 @@ export default function AccountRulesScreen() {
   const [rules,       setRules]       = useState<RuleWithCategory[]>([]);
   const [categories,  setCategories]  = useState<Category[]>([]);
   const [loading,     setLoading]     = useState(true);
-  const [sheetOpen,   setSheetOpen]   = useState(false);
-  const [matchType,   setMatchType]   = useState<MatchType>('contains');
-  const [matchText,   setMatchText]   = useState('');
-  const [categoryId,  setCategoryId]  = useState('');
-  const [saving,      setSaving]      = useState(false);
+  const [sheetOpen,    setSheetOpen]    = useState(false);
+  const [matchType,    setMatchType]    = useState<MatchType>('contains');
+  const [matchText,    setMatchText]    = useState('');
+  const [categoryId,   setCategoryId]   = useState('');
+  const [saving,       setSaving]       = useState(false);
+  // Quick-create category state within the Add Rule sheet
+  const [catPhase,     setCatPhase]     = useState<'pick' | 'create'>('pick');
+  const [newCatName,   setNewCatName]   = useState('');
+  const [newCatColor,  setNewCatColor]  = useState(CATEGORY_COLORS[0].hex);
+  const [creatingCat,  setCreatingCat]  = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -61,7 +67,28 @@ export default function AccountRulesScreen() {
     setMatchType('contains');
     setMatchText('');
     if (categories.length > 0) setCategoryId(categories[0].id);
+    setCatPhase('pick');
+    setNewCatName('');
+    setNewCatColor(CATEGORY_COLORS[0].hex);
     setSheetOpen(true);
+  }
+
+  async function handleQuickCreateCat() {
+    const trimmed = newCatName.trim();
+    if (!trimmed || creatingCat) return;
+    setCreatingCat(true);
+    try {
+      const newId = Crypto.randomUUID();
+      await insertCategory({ id: newId, name: trimmed, color: newCatColor });
+      const newCat: Category = { id: newId, name: trimmed, color: newCatColor, created_at: Date.now() };
+      setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
+      setCategoryId(newId);
+      setCatPhase('pick');
+      setNewCatName('');
+      setNewCatColor(CATEGORY_COLORS[0].hex);
+    } finally {
+      setCreatingCat(false);
+    }
   }
 
   async function handleAddRule() {
@@ -189,65 +216,119 @@ export default function AccountRulesScreen() {
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setSheetOpen(false)} />
         <SafeAreaView style={styles.sheet}>
           <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Add Rule</Text>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetScroll}>
+            <Text style={styles.sheetTitle}>Add Rule</Text>
 
-          <Text style={styles.sheetLabel}>Match type</Text>
-          <View style={styles.tabs}>
-            {MATCH_TYPES.map(m => (
-              <TouchableOpacity
-                key={m.value}
-                style={[styles.tab, matchType === m.value && styles.tabActive]}
-                onPress={() => setMatchType(m.value)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.tabText, matchType === m.value && styles.tabTextActive]}>
-                  {m.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+            <Text style={styles.sheetLabel}>Match type</Text>
+            <View style={styles.tabs}>
+              {MATCH_TYPES.map(m => (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.tab, matchType === m.value && styles.tabActive]}
+                  onPress={() => setMatchType(m.value)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.tabText, matchType === m.value && styles.tabTextActive]}>
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-          <Text style={styles.sheetLabel}>Text to match (case-insensitive)</Text>
-          <TextInput
-            style={styles.sheetInput}
-            value={matchText}
-            onChangeText={setMatchText}
-            placeholder="e.g. whole foods"
-            placeholderTextColor={colors.textTertiary}
-            autoFocus
-          />
+            <Text style={styles.sheetLabel}>Text to match (case-insensitive)</Text>
+            <TextInput
+              style={styles.sheetInput}
+              value={matchText}
+              onChangeText={setMatchText}
+              placeholder="e.g. whole foods"
+              placeholderTextColor={colors.textTertiary}
+              autoFocus
+            />
 
-          <Text style={styles.sheetLabel}>Assign category</Text>
-          <View style={styles.catPills}>
-            {categories.map(c => (
-              <TouchableOpacity
-                key={c.id}
-                style={[
-                  styles.catPill,
-                  { borderColor: c.color },
-                  categoryId === c.id && { backgroundColor: c.color },
-                ]}
-                onPress={() => setCategoryId(c.id)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.catPillText, categoryId === c.id && styles.catPillTextSelected]}>
-                  {c.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {categories.length === 0 && (
-              <Text style={styles.noCatsText}>Create a category first.</Text>
+            {/* Category pick or inline create */}
+            {catPhase === 'pick' ? (
+              <>
+                <Text style={styles.sheetLabel}>Assign category</Text>
+                <View style={styles.catPills}>
+                  {categories.map(c => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[
+                        styles.catPill,
+                        { borderColor: c.color },
+                        categoryId === c.id && { backgroundColor: c.color },
+                      ]}
+                      onPress={() => setCategoryId(c.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.catPillText, categoryId === c.id && styles.catPillTextSelected]}>
+                        {c.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    style={styles.newCatPill}
+                    onPress={() => setCatPhase('create')}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.newCatPillText}>+ New</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.quickCatBox}>
+                <View style={styles.quickCatHeader}>
+                  <Text style={styles.sheetLabel}>New category</Text>
+                  <TouchableOpacity onPress={() => setCatPhase('pick')} hitSlop={10}>
+                    <Text style={styles.quickCatCancel}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={[styles.sheetInput, { marginBottom: spacing.sm }]}
+                  value={newCatName}
+                  onChangeText={setNewCatName}
+                  placeholder="Category name"
+                  placeholderTextColor={colors.textTertiary}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleQuickCreateCat}
+                />
+                <View style={styles.colorGrid}>
+                  {CATEGORY_COLORS.map(c => (
+                    <TouchableOpacity
+                      key={c.hex}
+                      style={[
+                        styles.colorSwatch,
+                        { backgroundColor: c.hex },
+                        newCatColor === c.hex && styles.colorSwatchSelected,
+                      ]}
+                      onPress={() => setNewCatColor(c.hex)}
+                      activeOpacity={0.8}
+                    >
+                      {newCatColor === c.hex && <Text style={styles.colorCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={[styles.quickCatSave, (!newCatName.trim() || creatingCat) && styles.saveBtnDisabled]}
+                  onPress={handleQuickCreateCat}
+                  disabled={!newCatName.trim() || creatingCat}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.saveBtnText}>{creatingCat ? 'Saving…' : 'Create & Select'}</Text>
+                </TouchableOpacity>
+              </View>
             )}
-          </View>
 
-          <TouchableOpacity
-            style={[styles.saveBtn, (!matchText.trim() || !categoryId || saving) && styles.saveBtnDisabled]}
-            onPress={handleAddRule}
-            disabled={!matchText.trim() || !categoryId || saving}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Add Rule'}</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.saveBtn, (!matchText.trim() || !categoryId || saving) && styles.saveBtnDisabled]}
+              onPress={handleAddRule}
+              disabled={!matchText.trim() || !categoryId || saving}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Add Rule'}</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </>
@@ -333,6 +414,35 @@ const styles = StyleSheet.create({
   catPillText:         { fontFamily: font.semiBold, fontSize: 14, color: colors.text },
   catPillTextSelected: { color: colors.textOnColor },
   noCatsText:          { fontFamily: font.regular, fontSize: 14, color: colors.textTertiary },
+
+  sheetScroll: { paddingBottom: spacing.lg },
+
+  newCatPill: {
+    paddingVertical: 7, paddingHorizontal: spacing.md,
+    borderRadius: radius.full, borderWidth: 2,
+    borderColor: colors.primary, borderStyle: 'dashed',
+  },
+  newCatPillText: { fontFamily: font.semiBold, fontSize: 14, color: colors.primary },
+
+  quickCatBox: {
+    backgroundColor: colors.surfaceAlt, borderRadius: radius.md,
+    padding: spacing.md, marginBottom: spacing.lg,
+  },
+  quickCatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  quickCatCancel: { fontFamily: font.semiBold, fontSize: 14, color: colors.textSecondary },
+
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  colorSwatch: {
+    width: 36, height: 36, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  colorSwatchSelected: { borderWidth: 3, borderColor: colors.text },
+  colorCheck: { fontSize: 14, color: '#fff', fontFamily: font.bold },
+
+  quickCatSave: {
+    backgroundColor: colors.primary, borderRadius: radius.full,
+    paddingVertical: 12, alignItems: 'center',
+  },
 
   saveBtn: {
     backgroundColor: colors.primary, borderRadius: radius.full,

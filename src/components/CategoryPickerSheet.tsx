@@ -1,63 +1,158 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  Modal, StyleSheet, SafeAreaView,
+  Modal, StyleSheet, SafeAreaView, TextInput, ScrollView,
 } from 'react-native';
-import { Category } from '../db/queries';
+import { Category, insertCategory } from '../db/queries';
+import { CATEGORY_COLORS } from '../domain/category-colors';
 import { colors, font, spacing, radius } from '../theme';
+import * as Crypto from 'expo-crypto';
 
 interface Props {
-  visible:           boolean;
-  categories:        Category[];
-  currentCategoryId: string | null;
-  onSelect:          (categoryId: string | null) => void;
-  onClose:           () => void;
+  visible:            boolean;
+  categories:         Category[];
+  currentCategoryId:  string | null;
+  onSelect:           (categoryId: string | null) => void;
+  onClose:            () => void;
+  onCategoryCreated?: (category: Category) => void;
 }
 
 export function CategoryPickerSheet({
-  visible, categories, currentCategoryId, onSelect, onClose,
+  visible, categories, currentCategoryId, onSelect, onClose, onCategoryCreated,
 }: Props) {
+  const [phase,    setPhase]    = useState<'list' | 'create'>('list');
+  const [newName,  setNewName]  = useState('');
+  const [newColor, setNewColor] = useState(CATEGORY_COLORS[0].hex);
+  const [creating, setCreating] = useState(false);
+
+  // Reset create form whenever modal closes or re-opens
+  useEffect(() => {
+    if (!visible) {
+      setPhase('list');
+      setNewName('');
+      setNewColor(CATEGORY_COLORS[0].hex);
+    }
+  }, [visible]);
+
+  async function handleQuickCreate() {
+    const trimmed = newName.trim();
+    if (!trimmed || creating) return;
+    setCreating(true);
+    try {
+      const id = Crypto.randomUUID();
+      await insertCategory({ id, name: trimmed, color: newColor });
+      const newCat: Category = { id, name: trimmed, color: newColor, created_at: Date.now() };
+      onCategoryCreated?.(newCat);
+      onSelect(id); // auto-select the new category and close
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
       <SafeAreaView style={styles.sheet}>
         <View style={styles.sheetHandle} />
-        <Text style={styles.title}>Assign Category</Text>
 
-        <FlatList
-          data={categories}
-          keyExtractor={c => c.id}
-          ListHeaderComponent={
-            <TouchableOpacity
-              style={[styles.row, currentCategoryId === null && styles.rowSelected]}
-              onPress={() => onSelect(null)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.noColorDot} />
-              <Text style={styles.rowLabel}>None (clear category)</Text>
-              {currentCategoryId === null && <Text style={styles.checkmark}>✓</Text>}
-            </TouchableOpacity>
-          }
-          renderItem={({ item, index }) => {
-            const isSelected = item.id === currentCategoryId;
-            return (
-              <TouchableOpacity
-                style={[styles.row, styles.rowBorder, isSelected && styles.rowSelected]}
-                onPress={() => onSelect(item.id)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.swatch, { backgroundColor: item.color }]} />
-                <Text style={styles.rowLabel}>{item.name}</Text>
-                {isSelected && <Text style={styles.checkmark}>✓</Text>}
+        {phase === 'list' ? (
+          <>
+            <Text style={styles.title}>Assign Category</Text>
+            <FlatList
+              data={categories}
+              keyExtractor={c => c.id}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                <TouchableOpacity
+                  style={[styles.row, currentCategoryId === null && styles.rowSelected]}
+                  onPress={() => onSelect(null)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.noColorDot} />
+                  <Text style={styles.rowLabel}>None (clear category)</Text>
+                  {currentCategoryId === null && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+              }
+              renderItem={({ item, index }) => {
+                const isSelected = item.id === currentCategoryId;
+                return (
+                  <TouchableOpacity
+                    style={[styles.row, styles.rowBorder, isSelected && styles.rowSelected]}
+                    onPress={() => onSelect(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.swatch, { backgroundColor: item.color }]} />
+                    <Text style={styles.rowLabel}>{item.name}</Text>
+                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyText}>No categories yet.</Text>
+                </View>
+              }
+              ListFooterComponent={
+                <TouchableOpacity
+                  style={[styles.row, styles.rowBorder]}
+                  onPress={() => setPhase('create')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.newCatBtn}>+ New Category</Text>
+                </TouchableOpacity>
+              }
+            />
+          </>
+        ) : (
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.createContent}>
+            <View style={styles.createHeader}>
+              <TouchableOpacity onPress={() => setPhase('list')} hitSlop={12}>
+                <Text style={styles.backBtn}>← Back</Text>
               </TouchableOpacity>
-            );
-          }}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No categories yet — create one first.</Text>
+              <Text style={styles.title}>New Category</Text>
+              <View style={styles.headerSpacer} />
             </View>
-          }
-        />
+
+            <Text style={styles.createLabel}>Name</Text>
+            <TextInput
+              style={styles.createInput}
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="e.g. Groceries"
+              placeholderTextColor={colors.textTertiary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleQuickCreate}
+            />
+
+            <Text style={[styles.createLabel, { marginTop: spacing.md }]}>Color</Text>
+            <View style={styles.colorGrid}>
+              {CATEGORY_COLORS.map(c => (
+                <TouchableOpacity
+                  key={c.hex}
+                  style={[
+                    styles.colorSwatch,
+                    { backgroundColor: c.hex },
+                    newColor === c.hex && styles.colorSwatchSelected,
+                  ]}
+                  onPress={() => setNewColor(c.hex)}
+                  activeOpacity={0.8}
+                >
+                  {newColor === c.hex && <Text style={styles.colorCheck}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, (!newName.trim() || creating) && styles.saveBtnDisabled]}
+              onPress={handleQuickCreate}
+              disabled={!newName.trim() || creating}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.saveBtnText}>{creating ? 'Saving…' : 'Save & Select'}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -69,7 +164,7 @@ const styles = StyleSheet.create({
     backgroundColor:      colors.background,
     borderTopLeftRadius:  radius.xl,
     borderTopRightRadius: radius.xl,
-    maxHeight:            '60%',
+    maxHeight:            '65%',
     paddingBottom:        spacing.lg,
   },
   sheetHandle: {
@@ -81,6 +176,8 @@ const styles = StyleSheet.create({
     fontFamily: font.bold, fontSize: 17, color: colors.text,
     textAlign: 'center', marginBottom: spacing.sm,
   },
+
+  // List phase
   row: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: spacing.md, paddingVertical: 14,
@@ -92,7 +189,33 @@ const styles = StyleSheet.create({
   swatch:      { width: 14, height: 14, borderRadius: radius.full, marginRight: spacing.md },
   noColorDot:  { width: 14, height: 14, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.md },
   checkmark:   { fontFamily: font.bold, fontSize: 15, color: colors.primary },
+  newCatBtn:   { fontFamily: font.semiBold, fontSize: 15, color: colors.primary, flex: 1 },
+  emptyWrap:   { padding: spacing.lg, alignItems: 'center' },
+  emptyText:   { fontFamily: font.regular, fontSize: 14, color: colors.textTertiary },
 
-  empty:     { padding: spacing.xl, alignItems: 'center' },
-  emptyText: { fontFamily: font.regular, fontSize: 14, color: colors.textTertiary },
+  // Create phase
+  createContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
+  createHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  backBtn:       { fontFamily: font.semiBold, fontSize: 15, color: colors.primary },
+  headerSpacer:  { width: 48 },
+  createLabel:   { fontFamily: font.semiBold, fontSize: 13, color: colors.textSecondary, marginBottom: spacing.sm, letterSpacing: 0.4 },
+  createInput: {
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: spacing.md, paddingVertical: 12,
+    fontFamily: font.regular, fontSize: 16, color: colors.text,
+  },
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  colorSwatch: {
+    width: 40, height: 40, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  colorSwatchSelected: { borderWidth: 3, borderColor: colors.text },
+  colorCheck:          { fontSize: 16, color: '#fff', fontFamily: font.bold },
+  saveBtn: {
+    backgroundColor: colors.primary, borderRadius: radius.full,
+    paddingVertical: 15, alignItems: 'center',
+  },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText:     { fontFamily: font.bold, fontSize: 16, color: colors.textOnColor },
 });

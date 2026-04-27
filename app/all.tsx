@@ -194,6 +194,7 @@ export default function AllAccountsScreen() {
         }
         onClose={() => setSelectedTransactionId(null)}
         onSelect={handleCategorySelect}
+        onCategoryCreated={cat => setCategories(prev => [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)))}
       />
     </>
   );
