@@ -9,8 +9,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Rule, Category, MatchType,
   getRulesForAccount, getAllCategories,
-  insertRule, deleteRule, reorderRules, insertCategory,
+  insertRule, updateRule, deleteRule, reorderRules, insertCategory,
 } from '../../../src/db/queries';
+import { autoApplyRulesForAccount } from '../../../src/domain/rules-engine';
 import { CATEGORY_COLORS } from '../../../src/domain/category-colors';
 import { Sloth } from '../../../src/components/Sloth';
 import { colors, font, spacing, radius } from '../../../src/theme';
@@ -26,17 +27,17 @@ const MATCH_TYPES: { value: MatchType; label: string }[] = [
 interface RuleWithCategory extends Rule { categoryName: string; categoryColor: string; }
 
 export default function AccountRulesScreen() {
-  const { id }    = useLocalSearchParams<{ id: string }>();
-  const insets    = useSafeAreaInsets();
-  const [rules,       setRules]       = useState<RuleWithCategory[]>([]);
-  const [categories,  setCategories]  = useState<Category[]>([]);
-  const [loading,     setLoading]     = useState(true);
+  const { id }  = useLocalSearchParams<{ id: string }>();
+  const insets  = useSafeAreaInsets();
+  const [rules,        setRules]        = useState<RuleWithCategory[]>([]);
+  const [categories,   setCategories]   = useState<Category[]>([]);
+  const [loading,      setLoading]      = useState(true);
   const [sheetOpen,    setSheetOpen]    = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [matchType,    setMatchType]    = useState<MatchType>('contains');
   const [matchText,    setMatchText]    = useState('');
   const [categoryId,   setCategoryId]   = useState('');
   const [saving,       setSaving]       = useState(false);
-  // Quick-create category state within the Add Rule sheet
   const [catPhase,     setCatPhase]     = useState<'pick' | 'create'>('pick');
   const [newCatName,   setNewCatName]   = useState('');
   const [newCatColor,  setNewCatColor]  = useState(CATEGORY_COLORS[0].hex);
@@ -63,10 +64,22 @@ export default function AccountRulesScreen() {
     return () => { active = false; };
   }, [id]));
 
-  function openSheet() {
+  function openAddSheet() {
+    setEditingRuleId(null);
     setMatchType('contains');
     setMatchText('');
     if (categories.length > 0) setCategoryId(categories[0].id);
+    setCatPhase('pick');
+    setNewCatName('');
+    setNewCatColor(CATEGORY_COLORS[0].hex);
+    setSheetOpen(true);
+  }
+
+  function openEditSheet(rule: RuleWithCategory) {
+    setEditingRuleId(rule.id);
+    setMatchType(rule.match_type);
+    setMatchText(rule.match_text);
+    setCategoryId(rule.category_id);
     setCatPhase('pick');
     setNewCatName('');
     setNewCatColor(CATEGORY_COLORS[0].hex);
@@ -91,28 +104,52 @@ export default function AccountRulesScreen() {
     }
   }
 
-  async function handleAddRule() {
+  async function reloadRules() {
+    const [rawRules, cats] = await Promise.all([getRulesForAccount(id), getAllCategories()]);
+    const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
+    setRules(rawRules.map(r => ({
+      ...r,
+      categoryName:  catMap[r.category_id]?.name  ?? '(deleted)',
+      categoryColor: catMap[r.category_id]?.color ?? colors.textTertiary,
+    })));
+  }
+
+  async function handleSaveRule() {
     const text = matchText.trim();
     if (!text || !categoryId) return;
     setSaving(true);
-    const maxPriority = rules.length > 0 ? Math.max(...rules.map(r => r.priority)) : 0;
     try {
-      await insertRule({
-        id: Crypto.randomUUID(),
-        account_id: id,
-        category_id: categoryId,
-        match_type: matchType,
-        match_text: text,
-        priority: maxPriority + 1,
-      });
-      const [rawRules, cats] = await Promise.all([getRulesForAccount(id), getAllCategories()]);
-      const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
-      setRules(rawRules.map(r => ({
-        ...r,
-        categoryName:  catMap[r.category_id]?.name  ?? '(deleted)',
-        categoryColor: catMap[r.category_id]?.color ?? colors.textTertiary,
-      })));
-      setSheetOpen(false);
+      if (editingRuleId) {
+        await updateRule(editingRuleId, { match_type: matchType, match_text: text, category_id: categoryId });
+        await reloadRules();
+        setSheetOpen(false);
+      } else {
+        const maxPriority = rules.length > 0 ? Math.max(...rules.map(r => r.priority)) : 0;
+        await insertRule({
+          id: Crypto.randomUUID(),
+          account_id: id,
+          category_id: categoryId,
+          match_type: matchType,
+          match_text: text,
+          priority: maxPriority + 1,
+        });
+        await reloadRules();
+        setSheetOpen(false);
+        Alert.alert(
+          'Rule saved!',
+          'Want to apply this rule to your existing uncategorized transactions now?',
+          [
+            { text: 'Not Now', style: 'cancel' },
+            {
+              text: 'Apply Now',
+              onPress: async () => {
+                const count = await autoApplyRulesForAccount(id);
+                Alert.alert('Done!', `Categorized ${count} transaction${count === 1 ? '' : 's'}.`);
+              },
+            },
+          ],
+        );
+      }
     } finally {
       setSaving(false);
     }
@@ -158,7 +195,7 @@ export default function AccountRulesScreen() {
         options={{
           title: 'Rules',
           headerRight: () => (
-            <TouchableOpacity onPress={openSheet} hitSlop={12}>
+            <TouchableOpacity onPress={openAddSheet} hitSlop={12}>
               <Text style={styles.addBtn}>Add</Text>
             </TouchableOpacity>
           ),
@@ -170,11 +207,11 @@ export default function AccountRulesScreen() {
           keyExtractor={r => r.id}
           contentContainerStyle={rules.length === 0 && styles.listEmpty}
           ListHeaderComponent={rules.length > 0 ? (
-            <Text style={styles.hint}>Rules run top-to-bottom on import. First match wins.</Text>
+            <Text style={styles.hint}>Rules run top-to-bottom on import. First match wins. Tap a rule to edit it.</Text>
           ) : null}
           renderItem={({ item, index }) => (
             <View style={[styles.ruleRow, index > 0 && styles.rowBorder]}>
-              <View style={styles.ruleInfo}>
+              <TouchableOpacity style={styles.ruleInfo} onPress={() => openEditSheet(item)} activeOpacity={0.6}>
                 <Text style={styles.ruleMatchLine}>
                   <Text style={styles.ruleMatchType}>{MATCH_TYPES.find(m => m.value === item.match_type)?.label ?? item.match_type}</Text>
                   {' "'}
@@ -185,7 +222,7 @@ export default function AccountRulesScreen() {
                   <View style={[styles.ruleCatDot, { backgroundColor: item.categoryColor }]} />
                   <Text style={styles.ruleCatName}>{item.categoryName}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
               <View style={styles.ruleActions}>
                 <TouchableOpacity onPress={() => handleMove(index, 'up')} disabled={index === 0} hitSlop={8}>
                   <Text style={[styles.arrow, index === 0 && styles.arrowDisabled]}>↑</Text>
@@ -211,13 +248,13 @@ export default function AccountRulesScreen() {
         />
       </View>
 
-      {/* Add Rule Sheet */}
+      {/* Add / Edit Rule Sheet */}
       <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setSheetOpen(false)} />
         <SafeAreaView style={styles.sheet}>
           <View style={styles.sheetHandle} />
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetScroll}>
-            <Text style={styles.sheetTitle}>Add Rule</Text>
+            <Text style={styles.sheetTitle}>{editingRuleId ? 'Edit Rule' : 'Add Rule'}</Text>
 
             <Text style={styles.sheetLabel}>Match type</Text>
             <View style={styles.tabs}>
@@ -245,7 +282,6 @@ export default function AccountRulesScreen() {
               autoFocus
             />
 
-            {/* Category pick or inline create */}
             {catPhase === 'pick' ? (
               <>
                 <Text style={styles.sheetLabel}>Assign category</Text>
@@ -322,11 +358,13 @@ export default function AccountRulesScreen() {
 
             <TouchableOpacity
               style={[styles.saveBtn, (!matchText.trim() || !categoryId || saving) && styles.saveBtnDisabled]}
-              onPress={handleAddRule}
+              onPress={handleSaveRule}
               disabled={!matchText.trim() || !categoryId || saving}
               activeOpacity={0.85}
             >
-              <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Add Rule'}</Text>
+              <Text style={styles.saveBtnText}>
+                {saving ? 'Saving…' : editingRuleId ? 'Save Changes' : 'Add Rule'}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
@@ -386,10 +424,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontFamily: font.bold, fontSize: 17, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   sheetLabel: { fontFamily: font.semiBold, fontSize: 13, color: colors.textSecondary, marginBottom: spacing.sm, letterSpacing: 0.4 },
 
-  tabs: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs,
-    marginBottom: spacing.md,
-  },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
   tab: {
     paddingVertical: 7, paddingHorizontal: spacing.md,
     borderRadius: radius.full, backgroundColor: colors.surfaceAlt,
@@ -407,7 +442,7 @@ const styles = StyleSheet.create({
   },
 
   catPills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  catPill:  {
+  catPill: {
     paddingVertical: 7, paddingHorizontal: spacing.md,
     borderRadius: radius.full, borderWidth: 2,
   },
