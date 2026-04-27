@@ -103,7 +103,7 @@ export default function AccountsListScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Slo & Steady' }} />
+      <Stack.Screen options={{ title: 'Slo N Ready' }} />
       <View style={styles.container}>
         <FlatList
           data={accounts}
@@ -183,7 +183,7 @@ export default function AccountsListScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Sloth sloth="laptop" size={140} />
-              <Text style={styles.emptyTitle}>Welcome to Slo&nbsp;&amp;&nbsp;Steady</Text>
+              <Text style={styles.emptyTitle}>Welcome to Slo N Ready</Text>
               <Text style={styles.emptyBody}>
                 No rush — add your first account and{'\n'}we'll start tracking at our own pace.
               </Text>
