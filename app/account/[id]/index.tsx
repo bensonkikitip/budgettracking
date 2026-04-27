@@ -146,6 +146,7 @@ export default function AccountDetailScreen() {
     if (!selectedTransactionId) return;
     const tx = transactions.find(t => t.id === selectedTransactionId);
     if (tx?.category_id === categoryId) { setSelectedTransactionId(null); return; }
+    const wasUncategorized = tx?.category_id == null;
     await setTransactionCategory(selectedTransactionId, categoryId, true, null);
     setTransactions(prev => prev.map(t =>
       t.id === selectedTransactionId
@@ -154,6 +155,22 @@ export default function AccountDetailScreen() {
     ));
     setSelectedTransactionId(null);
     void writeBackup();
+    if (wasUncategorized && categoryId && tx?.description) {
+      Alert.alert(
+        'Create a rule?',
+        `Want to automatically categorize future transactions containing "${tx.description}"?`,
+        [
+          { text: 'No thanks', style: 'cancel' },
+          {
+            text: 'Create Rule',
+            onPress: () => router.push({
+              pathname: `/account/${id}/rules`,
+              params: { prefillText: tx.description, prefillCategory: categoryId },
+            }),
+          },
+        ],
+      );
+    }
   }
 
   if (loading) {

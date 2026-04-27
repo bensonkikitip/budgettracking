@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   Modal, TextInput, StyleSheet, SafeAreaView,
@@ -30,7 +30,11 @@ type CatView = 'collapsed' | 'list' | 'create';
 interface RuleWithCategory extends Rule { categoryName: string; categoryColor: string; }
 
 export default function AccountRulesScreen() {
-  const { id }  = useLocalSearchParams<{ id: string }>();
+  const { id, prefillText, prefillCategory } = useLocalSearchParams<{
+    id: string;
+    prefillText?: string;
+    prefillCategory?: string;
+  }>();
   const insets  = useSafeAreaInsets();
   const [rules,         setRules]         = useState<RuleWithCategory[]>([]);
   const [categories,    setCategories]    = useState<Category[]>([]);
@@ -43,6 +47,9 @@ export default function AccountRulesScreen() {
   const [matchText,     setMatchText]     = useState('');
   const [categoryId,    setCategoryId]    = useState('');
   const [saving,        setSaving]        = useState(false);
+
+  // Tracks whether we've already consumed the prefill params (so it only fires once)
+  const prefillApplied = useRef(false);
 
   // Inline category picker (inside the sheet ScrollView — no second modal)
   const [catView,     setCatView]     = useState<CatView>('collapsed');
@@ -70,6 +77,22 @@ export default function AccountRulesScreen() {
     })();
     return () => { active = false; };
   }, [id]));
+
+  // Auto-open Add sheet pre-filled when navigated here from the "Create Rule?" prompt
+  useEffect(() => {
+    if (!prefillText || prefillApplied.current || loading) return;
+    prefillApplied.current = true;
+    setEditingRuleId(null);
+    setMatchType('contains');
+    setMatchText(prefillText);
+    if (prefillCategory) {
+      setCategoryId(prefillCategory);
+    } else if (categories.length > 0) {
+      setCategoryId(categories[0].id);
+    }
+    setCatView('collapsed');
+    setSheetOpen(true);
+  }, [loading, prefillText, prefillCategory]);
 
   function openAddSheet() {
     setEditingRuleId(null);

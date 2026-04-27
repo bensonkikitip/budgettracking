@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, FlatList, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useFocusEffect, Stack } from 'expo-router';
+import { View, FlatList, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { useFocusEffect, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Account, Transaction, Category,
@@ -20,7 +20,8 @@ import { writeBackup } from '../src/db/backup';
 import { colors, font, spacing } from '../src/theme';
 
 export default function AllAccountsScreen() {
-  const insets = useSafeAreaInsets();
+  const insets  = useSafeAreaInsets();
+  const router  = useRouter();
   const [accounts,              setAccounts]              = useState<Account[]>([]);
   const [transactions,          setTransactions]          = useState<Transaction[]>([]);
   const [months,                setMonths]                = useState<MonthEntry[]>([]);
@@ -133,6 +134,7 @@ export default function AllAccountsScreen() {
     if (!selectedTransactionId) return;
     const tx = transactions.find(t => t.id === selectedTransactionId);
     if (tx?.category_id === categoryId) { setSelectedTransactionId(null); return; }
+    const wasUncategorized = tx?.category_id == null;
     await setTransactionCategory(selectedTransactionId, categoryId, true, null);
     setTransactions(prev => prev.map(t =>
       t.id === selectedTransactionId
@@ -141,6 +143,22 @@ export default function AllAccountsScreen() {
     ));
     setSelectedTransactionId(null);
     void writeBackup();
+    if (wasUncategorized && categoryId && tx?.description && tx?.account_id) {
+      Alert.alert(
+        'Create a rule?',
+        `Want to automatically categorize future transactions containing "${tx.description}"?`,
+        [
+          { text: 'No thanks', style: 'cancel' },
+          {
+            text: 'Create Rule',
+            onPress: () => router.push({
+              pathname: `/account/${tx.account_id}/rules`,
+              params: { prefillText: tx.description, prefillCategory: categoryId },
+            }),
+          },
+        ],
+      );
+    }
   }
 
   if (loading) {
