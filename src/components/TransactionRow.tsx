@@ -2,31 +2,53 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Transaction } from '../db/queries';
 import { centsToDollars } from '../domain/money';
+import { colors, font, spacing, radius } from '../theme';
 
 interface Props {
-  transaction: Transaction;
+  transaction:  Transaction;
   accountBadge?: string;
 }
 
 export function TransactionRow({ transaction, accountBadge }: Props) {
-  const isDropped = transaction.dropped_at != null;
+  const isDropped  = transaction.dropped_at != null;
+  const isPending  = !!transaction.is_pending && !isDropped;
   const isPositive = transaction.amount_cents >= 0;
+
+  const amountColor = isDropped
+    ? colors.dropped
+    : isPositive
+    ? colors.income
+    : colors.text;
+
   return (
     <View style={[styles.row, isDropped && styles.rowDropped]}>
       <View style={styles.left}>
-        <Text style={[styles.description, isDropped && styles.descriptionDropped]} numberOfLines={1}>
+        <Text
+          style={[styles.description, isDropped && styles.textDropped]}
+          numberOfLines={1}
+        >
           {transaction.description}
         </Text>
         <View style={styles.meta}>
           <Text style={styles.date}>{transaction.date}</Text>
-          {accountBadge && <Text style={styles.badge}>{accountBadge}</Text>}
-          {isDropped
-            ? <Text style={styles.dropped}>Dropped</Text>
-            : !!transaction.is_pending && <Text style={styles.pending}>Pending</Text>
-          }
+          {accountBadge && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{accountBadge}</Text>
+            </View>
+          )}
+          {isDropped && (
+            <View style={[styles.pill, styles.pillDropped]}>
+              <Text style={[styles.pillText, { color: colors.dropped }]}>Dropped</Text>
+            </View>
+          )}
+          {isPending && (
+            <View style={[styles.pill, styles.pillPending]}>
+              <Text style={[styles.pillText, { color: colors.pending }]}>Pending</Text>
+            </View>
+          )}
         </View>
       </View>
-      <Text style={[styles.amount, isDropped ? styles.amountDropped : isPositive ? styles.positive : styles.negative]}>
+      <Text style={[styles.amount, { color: amountColor }, isDropped && styles.textDropped]}>
         {centsToDollars(transaction.amount_cents)}
       </Text>
     </View>
@@ -35,66 +57,69 @@ export function TransactionRow({ transaction, accountBadge }: Props) {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#d1d1d6',
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingVertical:   13,
+    paddingHorizontal: spacing.md,
+    backgroundColor:   colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+  },
+  rowDropped: {
+    backgroundColor: colors.background,
   },
   left: {
-    flex: 1,
-    marginRight: 8,
+    flex:        1,
+    marginRight: spacing.sm,
+    gap:         4,
   },
   description: {
-    fontSize: 15,
-    color: '#1c1c1e',
-    marginBottom: 3,
+    fontFamily: font.semiBold,
+    fontSize:   15,
+    color:      colors.text,
+  },
+  textDropped: {
+    color:               colors.dropped,
+    textDecorationLine:  'line-through',
   },
   meta: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    alignItems:    'center',
+    gap:           6,
   },
   date: {
-    fontSize: 12,
-    color: '#8e8e93',
+    fontFamily: font.regular,
+    fontSize:   12,
+    color:      colors.textTertiary,
   },
   badge: {
-    fontSize: 11,
-    color: '#fff',
-    backgroundColor: '#636366',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
+    backgroundColor:  colors.surfaceAlt,
+    borderRadius:     radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical:   1,
   },
-  pending: {
-    fontSize: 11,
-    color: '#ff9f0a',
-    fontStyle: 'italic',
+  badgeText: {
+    fontFamily: font.semiBold,
+    fontSize:   11,
+    color:      colors.textSecondary,
   },
-  dropped: {
-    fontSize: 11,
-    color: '#aeaeb2',
-    fontStyle: 'italic',
+  pill: {
+    borderRadius:     radius.full,
+    paddingHorizontal: 7,
+    paddingVertical:   1,
   },
-  rowDropped: {
-    backgroundColor: '#f9f9f9',
+  pillPending: {
+    backgroundColor: colors.accentLight,
   },
-  descriptionDropped: {
-    color: '#aeaeb2',
-    textDecorationLine: 'line-through',
+  pillDropped: {
+    backgroundColor: colors.surfaceAlt,
+  },
+  pillText: {
+    fontFamily: font.semiBold,
+    fontSize:   11,
   },
   amount: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontFamily: font.bold,
+    fontSize:   15,
   },
-  amountDropped: {
-    color: '#aeaeb2',
-    textDecorationLine: 'line-through',
-  },
-  positive: { color: '#2a9d5c' },
-  negative: { color: '#1c1c1e' },
 });

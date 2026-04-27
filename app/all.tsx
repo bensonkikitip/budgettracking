@@ -1,51 +1,49 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  FlatList,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
+import { View, FlatList, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useFocusEffect, Stack } from 'expo-router';
-import { Account, Transaction, getAllAccounts, getAllAccountsSummary, getAllTransactions, AccountSummary } from '../src/db/queries';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  Account, Transaction, AccountSummary,
+  getAllAccounts, getAllAccountsSummary, getAllTransactions,
+} from '../src/db/queries';
 import { SummaryBar } from '../src/components/SummaryBar';
 import { TransactionRow } from '../src/components/TransactionRow';
+import { Sloth } from '../src/components/Sloth';
+import { colors, font, spacing } from '../src/theme';
 
 export default function AllAccountsScreen() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const insets = useSafeAreaInsets();
+  const [accounts,     setAccounts]     = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [summary, setSummary] = useState<AccountSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary,      setSummary]      = useState<AccountSummary | null>(null);
+  const [loading,      setLoading]      = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      (async () => {
-        const [accts, txns, sum] = await Promise.all([
-          getAllAccounts(),
-          getAllTransactions(),
-          getAllAccountsSummary(),
-        ]);
-        if (active) {
-          setAccounts(accts);
-          setTransactions(txns);
-          setSummary(sum);
-          setLoading(false);
-        }
-      })();
-      return () => { active = false; };
-    }, []),
-  );
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      const [accts, txns, sum] = await Promise.all([
+        getAllAccounts(), getAllTransactions(), getAllAccountsSummary(),
+      ]);
+      if (active) {
+        setAccounts(accts);
+        setTransactions(txns);
+        setSummary(sum);
+        setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []));
 
   const accountMap = React.useMemo(
-    () => Object.fromEntries(accounts.map((a) => [a.id, a])),
+    () => Object.fromEntries(accounts.map(a => [a.id, a])),
     [accounts],
   );
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <Sloth sloth="sleeping" size={80} />
+        <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.primary} />
       </View>
     );
   }
@@ -63,20 +61,26 @@ export default function AllAccountsScreen() {
         )}
         <FlatList
           data={transactions}
-          keyExtractor={(item) => item.id}
+          keyExtractor={item => item.id}
           renderItem={({ item }) => (
             <TransactionRow
               transaction={item}
               accountBadge={accountMap[item.account_id]?.name}
             />
           )}
+          contentContainerStyle={[
+            transactions.length === 0 && styles.emptyContainer,
+            { paddingBottom: insets.bottom + spacing.lg },
+          ]}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No transactions yet.</Text>
-              <Text style={styles.emptyHint}>Import a CSV from an account to get started.</Text>
+            <View style={styles.emptyState}>
+              <Sloth sloth="meditating" size={130} />
+              <Text style={styles.emptyTitle}>All quiet here</Text>
+              <Text style={styles.emptyBody}>
+                Import a CSV from one of your accounts to see everything in one place.
+              </Text>
             </View>
           }
-          contentContainerStyle={transactions.length === 0 ? styles.emptyContainer : undefined}
         />
       </View>
     </>
@@ -84,10 +88,16 @@ export default function AllAccountsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f2f7' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  empty: { alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 17, fontWeight: '600', color: '#1c1c1e', marginBottom: 8 },
-  emptyHint: { fontSize: 15, color: '#8e8e93', textAlign: 'center', paddingHorizontal: 32 },
+  container:      { flex: 1, backgroundColor: colors.background },
+  center:         { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md, backgroundColor: colors.background },
   emptyContainer: { flex: 1 },
+  emptyState: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: spacing.xl, gap: spacing.md,
+  },
+  emptyTitle: { fontFamily: font.bold, fontSize: 20, color: colors.text },
+  emptyBody: {
+    fontFamily: font.regular, fontSize: 15, color: colors.textSecondary,
+    textAlign: 'center', lineHeight: 22,
+  },
 });

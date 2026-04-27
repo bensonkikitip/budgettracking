@@ -1,53 +1,55 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ScrollView,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, Alert, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { AccountType, CsvFormat, insertAccount } from '../../src/db/queries';
+import { colors, font, spacing, radius, accountColor } from '../../src/theme';
 
-const ACCOUNT_TYPES: { label: string; value: AccountType }[] = [
-  { label: 'Checking', value: 'checking' },
-  { label: 'Credit Card', value: 'credit_card' },
+const ACCOUNT_TYPES: { label: string; value: AccountType; emoji: string }[] = [
+  { label: 'Checking',    value: 'checking',    emoji: '🏦' },
+  { label: 'Credit Card', value: 'credit_card', emoji: '💳' },
 ];
 
 const CSV_FORMATS: { label: string; value: CsvFormat; forType: AccountType }[] = [
-  { label: 'Bank of America – Checking', value: 'boa_checking_v1', forType: 'checking' },
-  { label: 'Citi – Credit Card', value: 'citi_cc_v1', forType: 'credit_card' },
+  { label: 'Bank of America – Checking', value: 'boa_checking_v1', forType: 'checking'    },
+  { label: 'Citi – Credit Card',         value: 'citi_cc_v1',      forType: 'credit_card' },
 ];
 
 export default function AddAccountScreen() {
   const router = useRouter();
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AccountType>('checking');
+  const [name,      setName]      = useState('');
+  const [type,      setType]      = useState<AccountType>('checking');
   const [csvFormat, setCsvFormat] = useState<CsvFormat>('boa_checking_v1');
-  const [saving, setSaving] = useState(false);
+  const [saving,    setSaving]    = useState(false);
 
-  const availableFormats = CSV_FORMATS.filter((f) => f.forType === type);
+  const accentColor = accountColor[type];
+  const availableFormats = CSV_FORMATS.filter(f => f.forType === type);
 
   function handleTypeChange(newType: AccountType) {
     setType(newType);
-    const defaultFormat = CSV_FORMATS.find((f) => f.forType === newType);
-    if (defaultFormat) setCsvFormat(defaultFormat.value);
+    const def = CSV_FORMATS.find(f => f.forType === newType);
+    if (def) setCsvFormat(def.value);
   }
 
   async function handleSave() {
     if (!name.trim()) {
-      Alert.alert('Name required', 'Please enter a name for this account.');
+      Alert.alert('Name required', 'Please give this account a name.');
       return;
     }
     setSaving(true);
     try {
-      const id = Crypto.randomUUID();
-      await insertAccount({ id, name: name.trim(), type, csv_format: csvFormat, created_at: Date.now() });
+      await insertAccount({
+        id:         Crypto.randomUUID(),
+        name:       name.trim(),
+        type,
+        csv_format: csvFormat,
+        created_at: Date.now(),
+      });
       router.back();
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Could not save account. Please try again.');
     } finally {
       setSaving(false);
@@ -55,12 +57,42 @@ export default function AddAccountScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>ACCOUNT NAME</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Account type picker — shown first so the accent color responds immediately */}
+      <Text style={styles.sectionLabel}>ACCOUNT TYPE</Text>
+      <View style={styles.card}>
+        {ACCOUNT_TYPES.map((t, i) => (
+          <TouchableOpacity
+            key={t.value}
+            style={[
+              styles.option,
+              i > 0 && styles.optionBorder,
+              type === t.value && { backgroundColor: colors.primaryLight },
+            ]}
+            onPress={() => handleTypeChange(t.value)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.optionEmoji}>{t.emoji}</Text>
+            <Text style={[styles.optionLabel, type === t.value && { color: accentColor }]}>
+              {t.label}
+            </Text>
+            {type === t.value && (
+              <Text style={[styles.check, { color: accentColor }]}>✓</Text>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={styles.sectionLabel}>ACCOUNT NAME</Text>
+      <View style={styles.card}>
         <TextInput
           style={styles.input}
           placeholder="e.g. BoA Checking, Citi Rewards"
+          placeholderTextColor={colors.textTertiary}
           value={name}
           onChangeText={setName}
           autoFocus
@@ -68,41 +100,37 @@ export default function AddAccountScreen() {
         />
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>ACCOUNT TYPE</Text>
-        {ACCOUNT_TYPES.map((t) => (
-          <TouchableOpacity
-            key={t.value}
-            style={styles.option}
-            onPress={() => handleTypeChange(t.value)}
-          >
-            <Text style={styles.optionLabel}>{t.label}</Text>
-            {type === t.value && <Text style={styles.check}>✓</Text>}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>CSV FORMAT</Text>
-        {availableFormats.map((f) => (
+      <Text style={styles.sectionLabel}>CSV FORMAT</Text>
+      <View style={styles.card}>
+        {availableFormats.map((f, i) => (
           <TouchableOpacity
             key={f.value}
-            style={styles.option}
+            style={[
+              styles.option,
+              i > 0 && styles.optionBorder,
+              csvFormat === f.value && { backgroundColor: colors.primaryLight },
+            ]}
             onPress={() => setCsvFormat(f.value)}
+            activeOpacity={0.7}
           >
-            <Text style={styles.optionLabel}>{f.label}</Text>
-            {csvFormat === f.value && <Text style={styles.check}>✓</Text>}
+            <Text style={[styles.optionLabel, csvFormat === f.value && { color: accentColor }]}>
+              {f.label}
+            </Text>
+            {csvFormat === f.value && (
+              <Text style={[styles.check, { color: accentColor }]}>✓</Text>
+            )}
           </TouchableOpacity>
         ))}
-        <Text style={styles.hint}>
-          This tells the app how to parse your bank's CSV export format.
-        </Text>
       </View>
+      <Text style={styles.hint}>
+        This tells Slo&nbsp;&amp;&nbsp;Steady how to parse your bank's CSV export.
+      </Text>
 
       <TouchableOpacity
-        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+        style={[styles.saveButton, { backgroundColor: accentColor }, saving && styles.disabled]}
         onPress={handleSave}
         disabled={saving}
+        activeOpacity={0.85}
       >
         <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Add Account'}</Text>
       </TouchableOpacity>
@@ -111,46 +139,76 @@ export default function AddAccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2f2f7' },
-  section: { marginTop: 24 },
-  sectionHeader: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8e8e93',
-    letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    marginBottom: 6,
+  container: { flex: 1, backgroundColor: colors.background },
+  content:   { padding: spacing.md, gap: spacing.sm },
+
+  sectionLabel: {
+    fontFamily:   font.semiBold,
+    fontSize:     11,
+    color:        colors.textTertiary,
+    letterSpacing: 0.8,
+    marginTop:    spacing.md,
+    marginBottom: spacing.xs,
+    marginLeft:   spacing.xs,
   },
-  input: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#d1d1d6',
-    color: '#1c1c1e',
+
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.lg,
+    overflow:        'hidden',
+    borderWidth:     1,
+    borderColor:     colors.border,
   },
+
   option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
+    flexDirection:  'row',
+    alignItems:     'center',
+    paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#d1d1d6',
+    gap:            spacing.sm,
   },
-  optionLabel: { fontSize: 16, color: '#1c1c1e' },
-  check: { fontSize: 16, color: '#007aff', fontWeight: '600' },
-  hint: { fontSize: 13, color: '#8e8e93', paddingHorizontal: 16, paddingTop: 8 },
+  optionBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.separator,
+  },
+  optionEmoji: { fontSize: 18 },
+  optionLabel: {
+    fontFamily: font.semiBold,
+    fontSize:   15,
+    color:      colors.text,
+    flex:       1,
+  },
+  check: {
+    fontFamily: font.bold,
+    fontSize:   16,
+  },
+
+  input: {
+    fontFamily:   font.regular,
+    fontSize:     15,
+    color:        colors.text,
+    paddingHorizontal: spacing.md,
+    paddingVertical:   14,
+  },
+
+  hint: {
+    fontFamily: font.regular,
+    fontSize:   13,
+    color:      colors.textTertiary,
+    marginLeft: spacing.xs,
+    lineHeight: 18,
+  },
+
   saveButton: {
-    margin: 24,
-    backgroundColor: '#007aff',
-    borderRadius: 12,
+    borderRadius:    radius.full,
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems:      'center',
+    marginTop:       spacing.lg,
   },
-  saveButtonDisabled: { opacity: 0.6 },
-  saveButtonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  disabled: { opacity: 0.6 },
+  saveButtonText: {
+    fontFamily: font.bold,
+    fontSize:   17,
+    color:      colors.textOnColor,
+  },
 });
