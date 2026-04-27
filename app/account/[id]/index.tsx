@@ -79,9 +79,14 @@ export default function AccountDetailScreen() {
         options={{
           title: account.name,
           headerRight: () => (
-            <TouchableOpacity onPress={handleDelete} hitSlop={12}>
-              <Text style={styles.deleteBtn}>Delete</Text>
-            </TouchableOpacity>
+            <View style={styles.headerBtns}>
+              <TouchableOpacity onPress={() => router.push(`/account/${id}/edit`)} hitSlop={12}>
+                <Text style={styles.editBtn}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete} hitSlop={12}>
+                <Text style={styles.deleteBtn}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
@@ -165,6 +170,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  editBtn: {
+    fontFamily: font.semiBold,
+    fontSize:   15,
+    color:      colors.primary,
+  },
   deleteBtn: {
     fontFamily: font.semiBold,
     fontSize:   15,

@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { AccountType, CsvFormat, insertAccount } from '../../src/db/queries';
+import { DEFAULT_CONFIGS } from '../../src/parsers/column-config';
 import { colors, font, spacing, radius, accountColor } from '../../src/theme';
 
 const ACCOUNT_TYPES: { label: string; value: AccountType; emoji: string }[] = [
@@ -42,11 +43,12 @@ export default function AddAccountScreen() {
     setSaving(true);
     try {
       await insertAccount({
-        id:         Crypto.randomUUID(),
-        name:       name.trim(),
+        id:            Crypto.randomUUID(),
+        name:          name.trim(),
         type,
-        csv_format: csvFormat,
-        created_at: Date.now(),
+        csv_format:    csvFormat,
+        column_config: JSON.stringify(DEFAULT_CONFIGS[csvFormat]),
+        created_at:    Date.now(),
       });
       router.back();
     } catch {

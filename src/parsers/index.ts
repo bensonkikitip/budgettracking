@@ -1,18 +1,8 @@
-import { CsvFormat } from '../db/queries';
-import { parseBoaChecking, BoaRow } from './boa-checking';
-import { parseCitiCreditCard, CitiRow } from './citi-credit-card';
+import { ColumnConfig } from './column-config';
+import { parseGeneric, GenericRow } from './generic-parser';
 
-export type ParsedRow = (BoaRow | CitiRow) & { description: string; originalDescription: string };
+export type ParsedRow = GenericRow;
 
-export function parseCsv(format: CsvFormat, csvText: string): ParsedRow[] {
-  switch (format) {
-    case 'boa_checking_v1':
-      return parseBoaChecking(csvText);
-    case 'citi_cc_v1':
-      return parseCitiCreditCard(csvText);
-    default: {
-      const exhaustive: never = format;
-      throw new Error(`Unknown CSV format: ${exhaustive}`);
-    }
-  }
+export function parseCsv(config: ColumnConfig, csvText: string): ParsedRow[] {
+  return parseGeneric(config, csvText);
 }

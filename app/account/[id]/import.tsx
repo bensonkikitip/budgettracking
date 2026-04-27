@@ -10,7 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import {
   getAllAccounts, Account, importTransactions,
-  insertImportBatch, ImportResult,
+  insertImportBatch, ImportResult, parseColumnConfig,
 } from '../../../src/db/queries';
 import { parseCsv, ParsedRow } from '../../../src/parsers';
 import { assignTransactionIds } from '../../../src/domain/transaction-id';
@@ -54,7 +54,7 @@ export default function ImportScreen() {
       });
       if (!account) throw new Error('Account not found');
 
-      const rows = parseCsv(account.csv_format, text);
+      const rows = parseCsv(parseColumnConfig(account), text);
       if (rows.length === 0) throw new Error('No transactions found in this file.');
 
       const ids = assignTransactionIds(

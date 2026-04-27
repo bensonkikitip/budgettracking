@@ -70,6 +70,29 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync('PRAGMA user_version = 2');
   }
 
+  if (version < 3) {
+    try { await db.execAsync('ALTER TABLE accounts ADD COLUMN column_config TEXT'); } catch {}
+    // Backfill defaults for accounts created before v1.2
+    const boaDefault = JSON.stringify({
+      dateColumn: 'Date', descriptionColumn: 'Description', dateFormat: 'MM/DD/YYYY',
+      amountStyle: 'signed', signedAmountColumn: 'Amount', headerContains: 'Date,Description,Amount',
+    });
+    const citiDefault = JSON.stringify({
+      dateColumn: 'Date', descriptionColumn: 'Description', dateFormat: 'MM/DD/YYYY',
+      amountStyle: 'debit_credit', debitColumn: 'Debit', creditColumn: 'Credit',
+      pendingColumn: 'Status', clearedValue: 'Cleared',
+    });
+    await db.runAsync(
+      `UPDATE accounts SET column_config = ? WHERE csv_format = 'boa_checking_v1' AND column_config IS NULL`,
+      boaDefault,
+    );
+    await db.runAsync(
+      `UPDATE accounts SET column_config = ? WHERE csv_format = 'citi_cc_v1' AND column_config IS NULL`,
+      citiDefault,
+    );
+    await db.execAsync('PRAGMA user_version = 3');
+  }
+
   _db = db;
   return db;
 }
