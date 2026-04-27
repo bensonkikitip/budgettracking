@@ -12,7 +12,7 @@ import { buildMonthList, buildYearList, MonthEntry, YearEntry } from '../src/dom
 import { FilterMode } from '../src/components/MonthPicker';
 import { SummaryBar } from '../src/components/SummaryBar';
 import { MonthPicker } from '../src/components/MonthPicker';
-import { CategoryPicker } from '../src/components/CategoryPicker';
+import { CategoryPicker, NONE_FILTER } from '../src/components/CategoryPicker';
 import { TransactionRow } from '../src/components/TransactionRow';
 import { CategoryPickerSheet } from '../src/components/CategoryPickerSheet';
 import { Sloth } from '../src/components/Sloth';
@@ -115,11 +115,19 @@ export default function AllAccountsScreen() {
     return categories.filter(c => ids.has(c.id));
   }, [transactions, categories]);
 
-  const filteredTransactions = useMemo(() =>
-    categoryFilters.length > 0
-      ? transactions.filter(t => t.category_id !== null && categoryFilters.includes(t.category_id))
-      : transactions,
-  [transactions, categoryFilters]);
+  const hasUncategorized = useMemo(() =>
+    transactions.some(t => t.category_id === null && t.dropped_at === null),
+  [transactions]);
+
+  const filteredTransactions = useMemo(() => {
+    if (categoryFilters.length === 0) return transactions;
+    const noneSelected = categoryFilters.includes(NONE_FILTER);
+    const realFilters  = categoryFilters.filter(f => f !== NONE_FILTER);
+    return transactions.filter(t =>
+      (noneSelected && t.category_id === null) ||
+      (realFilters.length > 0 && t.category_id !== null && realFilters.includes(t.category_id)),
+    );
+  }, [transactions, categoryFilters]);
 
   const monthSummary = useMemo(() => {
     const active = filteredTransactions.filter(t => t.dropped_at === null);
@@ -187,11 +195,12 @@ export default function AllAccountsScreen() {
               onChangeMonth={handleMonthChange}
               onChangeYear={handleYearChange}
             />
-            {categoriesInPeriod.length > 0 && (
+            {(categoriesInPeriod.length > 0 || hasUncategorized) && (
               <CategoryPicker
                 categories={categoriesInPeriod}
                 selected={categoryFilters}
                 onSelect={setCategoryFilters}
+                showNone={hasUncategorized}
               />
             )}
           </View>

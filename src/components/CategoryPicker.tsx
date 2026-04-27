@@ -5,6 +5,9 @@ import {
 } from 'react-native';
 import { colors, font, spacing, radius } from '../theme';
 
+// Sentinel value representing "transactions with no category"
+export const NONE_FILTER = '__none__';
+
 interface CategoryOption {
   id:    string;
   name:  string;
@@ -13,17 +16,22 @@ interface CategoryOption {
 
 interface Props {
   categories: CategoryOption[];
-  selected:   string[];   // empty = all
+  selected:   string[];   // empty = all; may include NONE_FILTER
   onSelect:   (ids: string[]) => void;
+  showNone?:  boolean;    // show the "No Category" row
 }
 
-export function CategoryPicker({ categories, selected, onSelect }: Props) {
+export function CategoryPicker({ categories, selected, onSelect, showNone = false }: Props) {
   const [open, setOpen] = useState(false);
 
+  const noneSelected = selected.includes(NONE_FILTER);
+  const realSelected = selected.filter(s => s !== NONE_FILTER);
+
   const pillLabel =
-    selected.length === 0              ? 'All Categories'
-    : selected.length === 1            ? (categories.find(c => c.id === selected[0])?.name ?? 'Category')
-    :                                    `${selected.length} Categories`;
+    selected.length === 0                                   ? 'All Categories'
+    : selected.length === 1 && noneSelected                 ? 'No Category'
+    : selected.length === 1                                 ? (categories.find(c => c.id === selected[0])?.name ?? 'Category')
+    :                                                         `${selected.length} Categories`;
 
   function toggle(id: string) {
     onSelect(
@@ -55,17 +63,33 @@ export function CategoryPicker({ categories, selected, onSelect }: Props) {
             data={categories}
             keyExtractor={c => c.id}
             ListHeaderComponent={
-              <TouchableOpacity
-                style={[styles.row, selected.length === 0 && styles.rowSelected]}
-                onPress={() => onSelect([])}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.rowLabel}>All Categories</Text>
-                {selected.length === 0 && <Text style={styles.checkmark}>✓</Text>}
-              </TouchableOpacity>
+              <>
+                {/* All Categories */}
+                <TouchableOpacity
+                  style={[styles.row, selected.length === 0 && styles.rowSelected]}
+                  onPress={() => onSelect([])}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.rowLabel}>All Categories</Text>
+                  {selected.length === 0 && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+
+                {/* No Category */}
+                {showNone && (
+                  <TouchableOpacity
+                    style={[styles.row, styles.rowBorder, noneSelected && styles.rowSelected]}
+                    onPress={() => toggle(NONE_FILTER)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.dotEmpty} />
+                    <Text style={styles.rowLabel}>No Category</Text>
+                    {noneSelected && <Text style={styles.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+                )}
+              </>
             }
-            renderItem={({ item, index }) => {
-              const isSelected = selected.includes(item.id);
+            renderItem={({ item }) => {
+              const isSelected = realSelected.includes(item.id);
               return (
                 <TouchableOpacity
                   style={[styles.row, styles.rowBorder, isSelected && styles.rowSelected]}
@@ -156,6 +180,14 @@ const styles = StyleSheet.create({
     height:       10,
     borderRadius: radius.full,
     marginRight:  spacing.sm,
+  },
+  dotEmpty: {
+    width:        10,
+    height:       10,
+    borderRadius: radius.full,
+    marginRight:  spacing.sm,
+    borderWidth:  1,
+    borderColor:  colors.border,
   },
   rowLabel:  { fontFamily: font.semiBold, fontSize: 15, color: colors.text, flex: 1 },
   checkmark: { fontFamily: font.bold, fontSize: 15, color: colors.primary },
