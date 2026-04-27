@@ -23,6 +23,10 @@
           }
         }
       ]
+    },
+    "moduleNameMapper": {
+      "^expo-sqlite$": "<rootDir>/tests/__mocks__/expo-sqlite.ts",
+      "^expo-crypto$": "<rootDir>/tests/__mocks__/expo-crypto.ts"
     }
   },
   "dependencies": {
