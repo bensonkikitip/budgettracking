@@ -290,3 +290,99 @@ export async function getAllAccountsSummary(): Promise<AccountSummary> {
     last_imported_at: lastBatch?.imported_at ?? null,
   };
 }
+
+// --- Month-filtered queries ---
+
+export async function getDistinctMonths(accountId?: string): Promise<Array<{ month: string; count: number }>> {
+  const db = await getDb();
+  if (accountId) {
+    return db.getAllAsync<{ month: string; count: number }>(
+      `SELECT substr(date, 1, 7) AS month, COUNT(*) AS count
+       FROM transactions
+       WHERE account_id = ? AND dropped_at IS NULL
+       GROUP BY month ORDER BY month DESC`,
+      accountId,
+    );
+  }
+  return db.getAllAsync<{ month: string; count: number }>(
+    `SELECT substr(date, 1, 7) AS month, COUNT(*) AS count
+     FROM transactions
+     WHERE dropped_at IS NULL
+     GROUP BY month ORDER BY month DESC`,
+  );
+}
+
+export async function getTransactionsForMonth(accountId: string, month: string): Promise<Transaction[]> {
+  const db = await getDb();
+  return db.getAllAsync<Transaction>(
+    `SELECT * FROM transactions
+     WHERE account_id = ? AND substr(date, 1, 7) = ?
+     ORDER BY date DESC, created_at DESC`,
+    accountId, month,
+  );
+}
+
+export async function getAllTransactionsForMonth(month: string): Promise<Transaction[]> {
+  const db = await getDb();
+  return db.getAllAsync<Transaction>(
+    `SELECT * FROM transactions
+     WHERE substr(date, 1, 7) = ?
+     ORDER BY date DESC, created_at DESC`,
+    month,
+  );
+}
+
+export async function getAccountSummaryForMonth(accountId: string, month: string): Promise<AccountSummary> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{
+    income_cents: number; expense_cents: number;
+    net_cents: number; transaction_count: number;
+  }>(
+    `SELECT
+       COALESCE(SUM(CASE WHEN amount_cents > 0 THEN amount_cents ELSE 0 END), 0) AS income_cents,
+       COALESCE(SUM(CASE WHEN amount_cents < 0 THEN amount_cents ELSE 0 END), 0) AS expense_cents,
+       COALESCE(SUM(amount_cents), 0) AS net_cents,
+       COUNT(*) AS transaction_count
+     FROM transactions
+     WHERE account_id = ? AND ${ACTIVE_FILTER} AND substr(date, 1, 7) = ?`,
+    accountId, month,
+  );
+  const lastBatch = await db.getFirstAsync<{ imported_at: number }>(
+    `SELECT imported_at FROM import_batches WHERE account_id = ? ORDER BY imported_at DESC LIMIT 1`,
+    accountId,
+  );
+  return {
+    income_cents:      row?.income_cents      ?? 0,
+    expense_cents:     row?.expense_cents     ?? 0,
+    net_cents:         row?.net_cents         ?? 0,
+    transaction_count: row?.transaction_count ?? 0,
+    last_imported_at:  lastBatch?.imported_at ?? null,
+  };
+}
+
+export async function getAllAccountsSummaryForMonth(month: string): Promise<AccountSummary> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{
+    income_cents: number; expense_cents: number;
+    net_cents: number; transaction_count: number;
+  }>(
+    `SELECT
+       COALESCE(SUM(CASE WHEN amount_cents > 0 THEN amount_cents ELSE 0 END), 0) AS income_cents,
+       COALESCE(SUM(CASE WHEN amount_cents < 0 THEN amount_cents ELSE 0 END), 0) AS expense_cents,
+       COALESCE(SUM(amount_cents), 0) AS net_cents,
+       COUNT(*) AS transaction_count
+     FROM transactions
+     WHERE ${ACTIVE_FILTER} AND substr(date, 1, 7) = ?`,
+    month,
+  );
+  const lastBatch = await db.getFirstAsync<{ imported_at: number }>(
+    `SELECT imported_at FROM import_batches ORDER BY imported_at DESC LIMIT 1`,
+  );
+  return {
+    income_cents:      row?.income_cents      ?? 0,
+    expense_cents:     row?.expense_cents     ?? 0,
+    net_cents:         row?.net_cents         ?? 0,
+    transaction_count: row?.transaction_count ?? 0,
+    last_imported_at:  lastBatch?.imported_at ?? null,
+  };
+}

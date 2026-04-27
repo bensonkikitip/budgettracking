@@ -1,12 +1,14 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, FlatList, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useFocusEffect, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Account, Transaction, AccountSummary,
-  getAllAccounts, getAllAccountsSummary, getAllTransactions,
+  Account, Transaction,
+  getAllAccounts, getDistinctMonths, getAllTransactionsForMonth,
 } from '../src/db/queries';
+import { buildMonthList, MonthEntry } from '../src/domain/month';
 import { SummaryBar } from '../src/components/SummaryBar';
+import { MonthPicker } from '../src/components/MonthPicker';
 import { TransactionRow } from '../src/components/TransactionRow';
 import { Sloth } from '../src/components/Sloth';
 import { colors, font, spacing } from '../src/theme';
@@ -15,29 +17,64 @@ export default function AllAccountsScreen() {
   const insets = useSafeAreaInsets();
   const [accounts,     setAccounts]     = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [summary,      setSummary]      = useState<AccountSummary | null>(null);
-  const [loading,      setLoading]      = useState(true);
+  const [months,       setMonths]       = useState<MonthEntry[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [hasAnyData, setHasAnyData] = useState(false);
+
+  const selectedMonthRef = useRef('');
+
+  function updateMonth(m: string) {
+    selectedMonthRef.current = m;
+    setSelectedMonth(m);
+  }
 
   useFocusEffect(useCallback(() => {
     let active = true;
     (async () => {
-      const [accts, txns, sum] = await Promise.all([
-        getAllAccounts(), getAllTransactions(), getAllAccountsSummary(),
+      const [accts, dbMonths] = await Promise.all([
+        getAllAccounts(), getDistinctMonths(),
       ]);
-      if (active) {
-        setAccounts(accts);
-        setTransactions(txns);
-        setSummary(sum);
-        setLoading(false);
-      }
+      if (!active) return;
+
+      const monthList = buildMonthList(dbMonths);
+      const cur       = selectedMonthRef.current;
+      const month     = (cur && monthList.some(m => m.key === cur))
+        ? cur
+        : monthList.find(m => m.count > 0)?.key ?? '';
+
+      setAccounts(accts);
+      setMonths(monthList);
+      setHasAnyData(dbMonths.length > 0);
+      updateMonth(month);
+
+      const txns = month ? await getAllTransactionsForMonth(month) : [];
+      if (!active) return;
+      setTransactions(txns);
+      setLoading(false);
     })();
     return () => { active = false; };
   }, []));
 
-  const accountMap = React.useMemo(
+  async function handleMonthChange(month: string) {
+    updateMonth(month);
+    const txns = await getAllTransactionsForMonth(month);
+    setTransactions(txns);
+  }
+
+  const accountMap = useMemo(
     () => Object.fromEntries(accounts.map(a => [a.id, a])),
     [accounts],
   );
+
+  const monthSummary = useMemo(() => {
+    const active = transactions.filter(t => t.dropped_at === null);
+    return {
+      income_cents:  active.filter(t => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0),
+      expense_cents: active.filter(t => t.amount_cents < 0).reduce((s, t) => s + t.amount_cents, 0),
+      net_cents:     active.reduce((s, t) => s + t.amount_cents, 0),
+    };
+  }, [transactions]);
 
   if (loading) {
     return (
@@ -52,13 +89,20 @@ export default function AllAccountsScreen() {
     <>
       <Stack.Screen options={{ title: 'All Accounts' }} />
       <View style={styles.container}>
-        {summary && (
-          <SummaryBar
-            incomeCents={summary.income_cents}
-            expenseCents={summary.expense_cents}
-            netCents={summary.net_cents}
+        {months.length > 0 && selectedMonth && (
+          <MonthPicker
+            months={months}
+            selected={selectedMonth}
+            onChange={handleMonthChange}
           />
         )}
+
+        <SummaryBar
+          incomeCents={monthSummary.income_cents}
+          expenseCents={monthSummary.expense_cents}
+          netCents={monthSummary.net_cents}
+        />
+
         <FlatList
           data={transactions}
           keyExtractor={item => item.id}
@@ -75,9 +119,13 @@ export default function AllAccountsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Sloth sloth="meditating" size={130} />
-              <Text style={styles.emptyTitle}>All quiet here</Text>
+              <Text style={styles.emptyTitle}>
+                {!hasAnyData ? 'All quiet here' : 'No transactions'}
+              </Text>
               <Text style={styles.emptyBody}>
-                Import a CSV from one of your accounts to see everything in one place.
+                {!hasAnyData
+                  ? 'Import a CSV from one of your accounts to see everything in one place.'
+                  : 'No transactions for this month.'}
               </Text>
             </View>
           }

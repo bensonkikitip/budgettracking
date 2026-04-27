@@ -86,7 +86,7 @@ export default function EditAccountScreen() {
   function handleReset() {
     Alert.alert(
       'Reset to Defaults?',
-      'This will restore the default column mapping for this account's format template.',
+      "This will restore the default column mapping for this account's format template.",
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Reset', onPress: () => setConfig(DEFAULT_CONFIGS[csvFormat]) },

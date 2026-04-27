@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert,
@@ -6,10 +6,13 @@ import {
 import { useRouter, useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Account, AccountSummary, Transaction,
-  getAllAccounts, getAccountSummary, getTransactions, deleteAccount,
+  Account, Transaction,
+  getAllAccounts, deleteAccount,
+  getDistinctMonths, getTransactionsForMonth,
 } from '../../../src/db/queries';
+import { buildMonthList, MonthEntry } from '../../../src/domain/month';
 import { SummaryBar } from '../../../src/components/SummaryBar';
+import { MonthPicker } from '../../../src/components/MonthPicker';
 import { TransactionRow } from '../../../src/components/TransactionRow';
 import { Sloth } from '../../../src/components/Sloth';
 import { colors, font, spacing, radius, accountColor } from '../../../src/theme';
@@ -19,25 +22,60 @@ export default function AccountDetailScreen() {
   const router   = useRouter();
   const insets   = useSafeAreaInsets();
   const [account,      setAccount]      = useState<Account | null>(null);
-  const [summary,      setSummary]      = useState<AccountSummary | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading,      setLoading]      = useState(true);
+  const [months,       setMonths]       = useState<MonthEntry[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const selectedMonthRef = useRef('');
+
+  function updateMonth(m: string) {
+    selectedMonthRef.current = m;
+    setSelectedMonth(m);
+  }
 
   useFocusEffect(useCallback(() => {
     let active = true;
     (async () => {
-      const accts = await getAllAccounts();
-      const acct  = accts.find(a => a.id === id) ?? null;
-      const [sum, txns] = await Promise.all([getAccountSummary(id), getTransactions(id)]);
-      if (active) {
-        setAccount(acct);
-        setSummary(sum);
-        setTransactions(txns);
-        setLoading(false);
-      }
+      const [accts, dbMonths] = await Promise.all([
+        getAllAccounts(), getDistinctMonths(id),
+      ]);
+      if (!active) return;
+
+      const acct      = accts.find(a => a.id === id) ?? null;
+      const monthList = buildMonthList(dbMonths);
+      const cur       = selectedMonthRef.current;
+      const month     = (cur && monthList.some(m => m.key === cur))
+        ? cur
+        : monthList.find(m => m.count > 0)?.key ?? '';
+
+      setAccount(acct);
+      setMonths(monthList);
+      updateMonth(month);
+
+      const txns = month ? await getTransactionsForMonth(id, month) : [];
+      if (!active) return;
+      setTransactions(txns);
+      setLoading(false);
     })();
     return () => { active = false; };
   }, [id]));
+
+  async function handleMonthChange(month: string) {
+    updateMonth(month);
+    const txns = await getTransactionsForMonth(id, month);
+    setTransactions(txns);
+  }
+
+  // Compute summary from the already-loaded (month-filtered) transactions
+  const monthSummary = useMemo(() => {
+    const active = transactions.filter(t => t.dropped_at === null);
+    return {
+      income_cents:  active.filter(t => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0),
+      expense_cents: active.filter(t => t.amount_cents < 0).reduce((s, t) => s + t.amount_cents, 0),
+      net_cents:     active.reduce((s, t) => s + t.amount_cents, 0),
+    };
+  }, [transactions]);
 
   function handleDelete() {
     Alert.alert(
@@ -91,20 +129,25 @@ export default function AccountDetailScreen() {
         }}
       />
       <View style={styles.container}>
-        {/* Coloured type strip */}
         <View style={[styles.typeStrip, { backgroundColor: accent }]}>
           <Text style={styles.typeStripText}>
             {account.type === 'checking' ? 'Checking Account' : 'Credit Card'}
           </Text>
         </View>
 
-        {summary && (
-          <SummaryBar
-            incomeCents={summary.income_cents}
-            expenseCents={summary.expense_cents}
-            netCents={summary.net_cents}
+        {months.length > 0 && selectedMonth && (
+          <MonthPicker
+            months={months}
+            selected={selectedMonth}
+            onChange={handleMonthChange}
           />
         )}
+
+        <SummaryBar
+          incomeCents={monthSummary.income_cents}
+          expenseCents={monthSummary.expense_cents}
+          netCents={monthSummary.net_cents}
+        />
 
         <FlatList
           data={transactions}
@@ -117,8 +160,12 @@ export default function AccountDetailScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Sloth sloth="receipt" size={120} />
-              <Text style={styles.emptyTitle}>No transactions yet</Text>
-              <Text style={styles.emptyBody}>Import a CSV to see your transactions here.</Text>
+              <Text style={styles.emptyTitle}>No transactions</Text>
+              <Text style={styles.emptyBody}>
+                {months.length === 0
+                  ? 'Import a CSV to see your transactions here.'
+                  : 'No transactions for this month.'}
+              </Text>
             </View>
           }
         />
@@ -140,65 +187,29 @@ const styles = StyleSheet.create({
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md, backgroundColor: colors.background },
   notFound:  { fontFamily: font.regular, fontSize: 15, color: colors.textSecondary },
 
-  typeStrip: {
-    paddingVertical:   6,
-    paddingHorizontal: spacing.md,
-  },
+  typeStrip: { paddingVertical: 6, paddingHorizontal: spacing.md },
   typeStripText: {
-    fontFamily: font.semiBold,
-    fontSize:   12,
-    color:      colors.textOnColor,
-    letterSpacing: 0.4,
+    fontFamily: font.semiBold, fontSize: 12,
+    color: colors.textOnColor, letterSpacing: 0.4,
   },
+
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  editBtn:    { fontFamily: font.semiBold, fontSize: 15, color: colors.primary },
+  deleteBtn:  { fontFamily: font.semiBold, fontSize: 15, color: colors.destructive, marginRight: 4 },
 
   emptyContainer: { flex: 1 },
   emptyState: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: spacing.xl, gap: spacing.md,
   },
-  emptyTitle: {
-    fontFamily: font.bold,
-    fontSize:   20,
-    color:      colors.text,
-    marginTop:  spacing.sm,
-  },
-  emptyBody: {
-    fontFamily: font.regular,
-    fontSize:   15,
-    color:      colors.textSecondary,
-    textAlign:  'center',
-    lineHeight: 22,
-  },
-
-  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  editBtn: {
-    fontFamily: font.semiBold,
-    fontSize:   15,
-    color:      colors.primary,
-  },
-  deleteBtn: {
-    fontFamily: font.semiBold,
-    fontSize:   15,
-    color:      colors.destructive,
-    marginRight: 4,
-  },
+  emptyTitle: { fontFamily: font.bold, fontSize: 20, color: colors.text, marginTop: spacing.sm },
+  emptyBody:  { fontFamily: font.regular, fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
 
   importFab: {
-    position:         'absolute',
-    left:             spacing.lg,
-    right:            spacing.lg,
-    borderRadius:     radius.full,
-    paddingVertical:  16,
-    alignItems:       'center',
-    shadowColor:      '#2C2416',
-    shadowOffset:     { width: 0, height: 4 },
-    shadowOpacity:    0.2,
-    shadowRadius:     8,
-    elevation:        6,
+    position: 'absolute', left: spacing.lg, right: spacing.lg,
+    borderRadius: radius.full, paddingVertical: 16, alignItems: 'center',
+    shadowColor: '#2C2416', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
   },
-  importFabText: {
-    fontFamily: font.bold,
-    fontSize:   17,
-    color:      colors.textOnColor,
-  },
+  importFabText: { fontFamily: font.bold, fontSize: 17, color: colors.textOnColor },
 });
