@@ -44,6 +44,7 @@ export default function AccountDetailScreen() {
   const [bulkPickerVisible,     setBulkPickerVisible]     = useState(false);
   const [searchText,            setSearchText]            = useState('');
   const [breakdownOpen,         setBreakdownOpen]         = useState(false);
+  const [undoBanner,            setUndoBanner]            = useState<{ txId: string; prevCategoryId: string | null } | null>(null);
 
   const selectedMonthRef = useRef('');
   const selectedYearRef  = useRef('');
@@ -224,6 +225,7 @@ export default function AccountDetailScreen() {
     const tx = transactions.find(t => t.id === selectedTransactionId);
     if (tx?.category_id === categoryId) { setSelectedTransactionId(null); return; }
     const wasUncategorized = tx?.category_id == null;
+    const prevCategoryId = tx?.category_id ?? null;
     await setTransactionCategory(selectedTransactionId, categoryId, true, null);
     setTransactions(prev => prev.map(t =>
       t.id === selectedTransactionId
@@ -232,33 +234,38 @@ export default function AccountDetailScreen() {
     ));
     setSelectedTransactionId(null);
     void writeBackup();
+
     if (wasUncategorized && categoryId && tx?.description) {
-      Alert.alert(
-        'Create a rule?',
-        `Want to automatically categorize future transactions containing "${tx.description}"?`,
-        [
-          {
-            text: 'Undo',
-            onPress: async () => {
-              await setTransactionCategory(tx.id, null, false, null);
-              setTransactions(prev => prev.map(t =>
-                t.id === tx.id
-                  ? { ...t, category_id: null, category_set_manually: 0, applied_rule_id: null }
-                  : t,
-              ));
-              void writeBackup();
+      if (account?.suggest_rules !== 0) {
+        Alert.alert(
+          'Create a rule?',
+          `Want to automatically categorize future transactions containing "${tx.description}"?`,
+          [
+            {
+              text: 'Undo',
+              onPress: async () => {
+                await setTransactionCategory(tx.id, null, false, null);
+                setTransactions(prev => prev.map(t =>
+                  t.id === tx.id
+                    ? { ...t, category_id: null, category_set_manually: 0, applied_rule_id: null }
+                    : t,
+                ));
+                void writeBackup();
+              },
             },
-          },
-          { text: 'No thanks', style: 'cancel' },
-          {
-            text: 'Create Rule',
-            onPress: () => router.push({
-              pathname: `/account/${id}/rules`,
-              params: { prefillText: tx.description, prefillCategory: categoryId },
-            }),
-          },
-        ],
-      );
+            { text: 'No thanks', style: 'cancel' },
+            {
+              text: 'Create Rule',
+              onPress: () => router.push({
+                pathname: `/account/${id}/rules`,
+                params: { prefillText: tx.description, prefillCategory: categoryId },
+              }),
+            },
+          ],
+        );
+      } else {
+        setUndoBanner({ txId: tx.id, prevCategoryId });
+      }
     }
   }
 
@@ -488,6 +495,33 @@ export default function AccountDetailScreen() {
         onSelect={handleBulkCategorySelect}
         onCategoryCreated={cat => setCategories(prev => [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)))}
       />
+
+      {undoBanner && (
+        <>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setUndoBanner(null)}
+          />
+          <View style={[styles.undoBanner, { bottom: insets.bottom + spacing.lg + 64 }]}>
+            <Text style={styles.undoBannerText}>Transaction categorized</Text>
+            <TouchableOpacity
+              onPress={async () => {
+                await setTransactionCategory(undoBanner.txId, undoBanner.prevCategoryId, false, null);
+                setTransactions(prev => prev.map(t =>
+                  t.id === undoBanner.txId
+                    ? { ...t, category_id: undoBanner.prevCategoryId, category_set_manually: 0, applied_rule_id: null }
+                    : t,
+                ));
+                setUndoBanner(null);
+                void writeBackup();
+              }}
+            >
+              <Text style={styles.undoBannerAction}>Undo</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </>
   );
 }
@@ -631,6 +665,26 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontFamily: font.bold, fontSize: 20, color: colors.text, marginTop: spacing.sm },
   emptyBody:  { fontFamily: font.regular, fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
+
+  undoBanner: {
+    position:          'absolute',
+    left:              spacing.lg,
+    right:             spacing.lg,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    backgroundColor:   colors.text,
+    paddingVertical:   14,
+    paddingHorizontal: spacing.md,
+    borderRadius:      radius.md,
+    shadowColor:       '#000',
+    shadowOffset:      { width: 0, height: 2 },
+    shadowOpacity:     0.2,
+    shadowRadius:      6,
+    elevation:         6,
+  },
+  undoBannerText:   { fontFamily: font.regular,  fontSize: 14, color: colors.textOnColor },
+  undoBannerAction: { fontFamily: font.semiBold, fontSize: 14, color: colors.primary },
 
   importFab: {
     position: 'absolute', left: spacing.lg, right: spacing.lg,

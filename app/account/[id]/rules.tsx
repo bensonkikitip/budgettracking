@@ -2,14 +2,15 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
   Modal, TextInput, StyleSheet, SafeAreaView,
-  ActivityIndicator, Alert, ScrollView,
+  ActivityIndicator, Alert, ScrollView, Switch,
 } from 'react-native';
 import { useLocalSearchParams, useFocusEffect, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Rule, RuleCondition, Category, MatchType,
-  getRulesForAccount, getAllCategories,
+  Account, Rule, RuleCondition, Category, MatchType,
+  getRulesForAccount, getAllCategories, getAllAccounts,
   insertRule, updateRule, deleteRule, reorderRules, insertCategory,
+  updateAccountSuggestRules,
 } from '../../../src/db/queries';
 import { autoApplyRulesForAccount } from '../../../src/domain/rules-engine';
 import { CATEGORY_COLORS } from '../../../src/domain/category-colors';
@@ -68,6 +69,7 @@ export default function AccountRulesScreen() {
   }>();
   const insets  = useSafeAreaInsets();
   const router  = useRouter();
+  const [account,       setAccount]       = useState<Account | null>(null);
   const [rules,         setRules]         = useState<RuleWithCategory[]>([]);
   const [categories,    setCategories]    = useState<Category[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -94,11 +96,13 @@ export default function AccountRulesScreen() {
   useFocusEffect(useCallback(() => {
     let active = true;
     (async () => {
-      const [rawRules, cats] = await Promise.all([
+      const [accts, rawRules, cats] = await Promise.all([
+        getAllAccounts(),
         getRulesForAccount(id),
         getAllCategories(),
       ]);
       if (!active) return;
+      setAccount(accts.find(a => a.id === id) ?? null);
       const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
       setRules(rawRules.map(r => ({
         ...r,
@@ -324,9 +328,31 @@ export default function AccountRulesScreen() {
           data={rules}
           keyExtractor={r => r.id}
           contentContainerStyle={rules.length === 0 && styles.listEmpty}
-          ListHeaderComponent={rules.length > 0 ? (
-            <Text style={styles.hint}>Rules run top-to-bottom on import. First match wins. Tap a rule to edit it.</Text>
-          ) : null}
+          ListHeaderComponent={(
+            <View>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Suggest rule creation</Text>
+                  <Text style={styles.settingDesc}>
+                    After manually categorizing a transaction, suggest creating a rule for it.
+                  </Text>
+                </View>
+                <Switch
+                  value={account?.suggest_rules !== 0}
+                  onValueChange={async (val) => {
+                    const next = val ? 1 : 0;
+                    setAccount(prev => prev ? { ...prev, suggest_rules: next } : prev);
+                    await updateAccountSuggestRules(id, next);
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+              {rules.length > 0 && (
+                <Text style={styles.hint}>Rules run top-to-bottom on import. First match wins. Tap a rule to edit it.</Text>
+              )}
+            </View>
+          )}
           renderItem={({ item, index }) => (
             <View style={[styles.ruleRow, index > 0 && styles.rowBorder]}>
               <TouchableOpacity style={styles.ruleInfo} onPress={() => openEditSheet(item)} activeOpacity={0.6}>
@@ -601,6 +627,28 @@ const styles = StyleSheet.create({
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   addBtn:    { fontFamily: font.semiBold, fontSize: 15, color: colors.primary },
   listEmpty: { flex: 1 },
+
+  settingRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical:   spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+    gap:               spacing.md,
+  },
+  settingInfo: { flex: 1 },
+  settingLabel: {
+    fontFamily: font.semiBold,
+    fontSize:   15,
+    color:      colors.text,
+  },
+  settingDesc: {
+    fontFamily: font.regular,
+    fontSize:   13,
+    color:      colors.textSecondary,
+    marginTop:  2,
+  },
 
   hint: {
     fontFamily: font.regular, fontSize: 13, color: colors.textTertiary,

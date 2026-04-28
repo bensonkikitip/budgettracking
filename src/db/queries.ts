@@ -11,6 +11,7 @@ export interface Account {
   csv_format: CsvFormat;
   column_config: string; // JSON blob — use parseColumnConfig() to read
   created_at: number;
+  suggest_rules: number; // 1 = show rule suggestion after manual categorization, 0 = show undo banner only
 }
 
 export function parseColumnConfig(account: Account): ColumnConfig {
@@ -120,6 +121,11 @@ export async function updateAccount(
   if (sets.length === 0) return;
   values.push(id);
   await db.runAsync(`UPDATE accounts SET ${sets.join(', ')} WHERE id = ?`, ...values);
+}
+
+export async function updateAccountSuggestRules(id: string, value: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE accounts SET suggest_rules = ? WHERE id = ?`, value, id);
 }
 
 export async function getAllAccounts(): Promise<Account[]> {
