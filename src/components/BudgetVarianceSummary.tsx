@@ -9,7 +9,6 @@ interface Props {
 }
 
 export function BudgetVarianceSummary({ summary }: Props) {
-  const netVariance = summary.income_variance_cents + summary.expense_variance_cents;
   return (
     <View style={styles.container}>
       <VarianceCell
@@ -27,8 +26,6 @@ export function BudgetVarianceSummary({ summary }: Props) {
         varianceCents={summary.expense_variance_cents}
         isIncome={false}
       />
-      <View style={styles.divider} />
-      <NetCell varianceCents={netVariance} />
     </View>
   );
 }
@@ -47,37 +44,25 @@ function VarianceCell({
   isIncome:      boolean;
 }) {
   const amountColor = isIncome ? colors.income : colors.expense;
-  // For income: positive variance = over goal = good. For expense: positive variance = under-spent = good.
+  const hasBudget = budgetCents !== 0;
   const varianceGood = varianceCents >= 0;
   const varianceColor = varianceGood ? colors.income : colors.expense;
   const arrow = varianceCents === 0 ? '' : varianceCents > 0 ? '▲ ' : '▼ ';
-  const hasBudget = budgetCents !== 0;
 
   return (
     <View style={styles.cell}>
       <Text style={styles.label}>{label.toUpperCase()}</Text>
-      <Text style={[styles.amount, { color: amountColor }]}>{centsToDollars(actualCents)}</Text>
+      <Text style={[styles.actual, { color: amountColor }]}>{centsToDollars(actualCents)}</Text>
       {hasBudget ? (
-        <Text style={[styles.variance, { color: varianceColor }]}>
-          {arrow}{centsToDollars(Math.abs(varianceCents))}
-        </Text>
+        <>
+          <Text style={styles.budgeted}>{centsToDollars(Math.abs(budgetCents))} budgeted</Text>
+          <Text style={[styles.variance, { color: varianceColor }]}>
+            {arrow}{centsToDollars(Math.abs(varianceCents))}
+          </Text>
+        </>
       ) : (
-        <Text style={styles.varianceNeutral}>no budget</Text>
+        <Text style={styles.noBudget}>no budget set</Text>
       )}
-    </View>
-  );
-}
-
-function NetCell({ varianceCents }: { varianceCents: number }) {
-  const good = varianceCents >= 0;
-  const color = good ? colors.netPositive : colors.netNegative;
-  const arrow = varianceCents === 0 ? '—' : varianceCents > 0 ? '▲ ' : '▼ ';
-  return (
-    <View style={styles.cell}>
-      <Text style={styles.label}>NET VAR.</Text>
-      <Text style={[styles.netAmount, { color }]}>
-        {varianceCents === 0 ? '—' : `${arrow}${centsToDollars(Math.abs(varianceCents))}`}
-      </Text>
     </View>
   );
 }
@@ -94,7 +79,7 @@ const styles = StyleSheet.create({
   cell: {
     flex:       1,
     alignItems: 'center',
-    gap:        2,
+    gap:        3,
   },
   divider: {
     width:           1,
@@ -108,19 +93,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  amount: {
+  actual: {
     fontFamily: font.bold,
-    fontSize:   15,
+    fontSize:   18,
   },
-  netAmount: {
-    fontFamily: font.extraBold,
-    fontSize:   16,
+  budgeted: {
+    fontFamily: font.regular,
+    fontSize:   11,
+    color:      colors.textSecondary,
   },
   variance: {
     fontFamily: font.semiBold,
-    fontSize:   11,
+    fontSize:   12,
   },
-  varianceNeutral: {
+  noBudget: {
     fontFamily: font.regular,
     fontSize:   11,
     color:      colors.textTertiary,

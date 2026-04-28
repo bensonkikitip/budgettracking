@@ -15,7 +15,7 @@ import {
 } from '../../../src/db/queries';
 import { writeBackup } from '../../../src/db/backup';
 import { buildMonthList, buildYearList, MonthEntry, YearEntry } from '../../../src/domain/month';
-import { monthsInYear } from '../../../src/domain/budget';
+import { monthsForPeriod } from '../../../src/domain/budget';
 import { buildCategoryRows, computeVarianceSummary } from '../../../src/domain/budget-variance';
 import { SummaryBar } from '../../../src/components/SummaryBar';
 import { MonthPicker, FilterMode } from '../../../src/components/MonthPicker';
@@ -235,10 +235,10 @@ export default function AccountDetailScreen() {
     displayedTransactions.every(t => selectedIds.has(t.id));
 
   // ── derived data (budget view) ────────────────────────────────────────────
-  const monthsInRange = useMemo(() => {
-    if (filterMode === 'year') return selectedYear ? monthsInYear(selectedYear) : [];
-    return selectedMonth ? [selectedMonth] : [];
-  }, [filterMode, selectedMonth, selectedYear]);
+  const monthsInRange = useMemo(
+    () => monthsForPeriod(filterMode, selectedMonth, selectedYear),
+    [filterMode, selectedMonth, selectedYear],
+  );
 
   const budgetCategoryRows = useMemo(
     () => buildCategoryRows(budgetRows, actualsRows, monthsInRange),

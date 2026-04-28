@@ -10,7 +10,7 @@ import {
   getBudgetsForAllAccountsYear, getActualsByCategoryMonthAllAccounts,
 } from '../src/db/queries';
 import { buildMonthList, buildYearList, MonthEntry, YearEntry } from '../src/domain/month';
-import { monthsInYear } from '../src/domain/budget';
+import { monthsForPeriod } from '../src/domain/budget';
 import { buildCategoryRows, computeVarianceSummary } from '../src/domain/budget-variance';
 import { FilterMode } from '../src/components/MonthPicker';
 import { SummaryBar } from '../src/components/SummaryBar';
@@ -229,10 +229,10 @@ export default function AllAccountsScreen() {
   }, [transactions, categoryMap]);
 
   // ── derived data (budget view) ────────────────────────────────────────────
-  const monthsInRange = useMemo(() => {
-    if (filterMode === 'year') return selectedYear ? monthsInYear(selectedYear) : [];
-    return selectedMonth ? [selectedMonth] : [];
-  }, [filterMode, selectedMonth, selectedYear]);
+  const monthsInRange = useMemo(
+    () => monthsForPeriod(filterMode, selectedMonth, selectedYear),
+    [filterMode, selectedMonth, selectedYear],
+  );
 
   const budgetCategoryRows = useMemo(
     () => buildCategoryRows(budgetRows, actualsRows, monthsInRange),

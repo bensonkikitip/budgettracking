@@ -27,3 +27,23 @@ export function applyPercentage(cents: number, pct: number): number {
 export function monthsInYear(year: string): string[] {
   return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
 }
+
+// Returns the set of YYYY-MM keys that a budget view should cover.
+// Year mode for the current calendar year is capped at the current month so the
+// budget denominator matches the portion of the year that has actually elapsed.
+export function monthsForPeriod(
+  filterMode: 'month' | 'year',
+  selectedMonth: string,
+  selectedYear: string,
+): string[] {
+  if (filterMode === 'year') {
+    if (!selectedYear) return [];
+    const all = monthsInYear(selectedYear);
+    const currentYear = new Date().getFullYear().toString();
+    if (selectedYear === currentYear) {
+      return all.slice(0, new Date().getMonth() + 1);
+    }
+    return all;
+  }
+  return selectedMonth ? [selectedMonth] : [];
+}
