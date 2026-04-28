@@ -88,8 +88,8 @@ export async function restoreFromData(data: BackupData): Promise<void> {
 
     for (const a of data.accounts) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO accounts (id, name, type, csv_format, column_config, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        a.id, a.name, a.type, a.csv_format, a.column_config ?? null, a.created_at,
+        'INSERT OR REPLACE INTO accounts (id, name, type, csv_format, column_config, created_at, suggest_rules) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        a.id, a.name, a.type, a.csv_format, a.column_config ?? null, a.created_at, a.suggest_rules ?? 1,
       );
     }
 
