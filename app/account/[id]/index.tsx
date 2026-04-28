@@ -346,12 +346,17 @@ export default function AccountDetailScreen() {
               onPress={() => setBreakdownOpen(o => !o)}
               activeOpacity={0.7}
             >
-              <Text style={styles.breakdownTitle}>By Category</Text>
+              <Text style={styles.breakdownTitle}>Totals by Category</Text>
               <Text style={styles.breakdownChevron}>{breakdownOpen ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
             {breakdownOpen && categoryTotals.map(row => (
-              <View key={row.key} style={styles.breakdownRow}>
+              <TouchableOpacity
+                key={row.key}
+                style={styles.breakdownRow}
+                activeOpacity={0.7}
+                onPress={() => { setCategoryFilters([row.key]); setBreakdownOpen(false); }}
+              >
                 {row.color
                   ? <View style={[styles.breakdownDot, { backgroundColor: row.color }]} />
                   : <View style={[styles.breakdownDot, styles.breakdownDotEmpty]} />
@@ -360,7 +365,7 @@ export default function AccountDetailScreen() {
                 <Text style={[styles.breakdownAmount, { color: row.total >= 0 ? colors.income : colors.text }]}>
                   {centsToDollars(row.total)}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
