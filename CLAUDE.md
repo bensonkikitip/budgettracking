@@ -14,22 +14,42 @@ These docs are the source of truth for schema and architecture. **Do not re-deri
 
 ## Ship & release checklist
 
-Run this every time a new version ships. **Steps 1 and 2 are mandatory whenever schema or functionality changes.**
+Run before every release. Pre-flight steps are non-negotiable.
 
-1. **Update `docs/SCHEMA.md`** if any database change was made:
-   - new table, column, index, or constraint
-   - new migration step in `src/db/client.ts` (bump `LATEST_DB_VERSION`)
+### Pre-flight (must pass before anything else)
+1. `npm test` — must pass.
+2. `npm run typecheck` — must pass.
+3. Smoke-test on Expo Go or Simulator: launch the app and navigate to anything you changed.
+4. Confirm `slo-n-ready-backup.json` is NOT staged (`git status` should not list it).
+
+### Update docs (mandatory when applicable)
+5. **Update `docs/SCHEMA.md`** if any DB change was made:
+   - new table / column / index / constraint
+   - new `if (version < N)` block in `src/db/client.ts` (`LATEST_DB_VERSION` bumped)
    - new field on a TypeScript interface in `src/db/queries.ts`
    - change to `BackupData` shape in `src/db/backup.ts`
-2. **Update `docs/ARCHITECTURE.md`** if any code-organization change was made:
+6. **Update `docs/ARCHITECTURE.md`** if any code-organization change was made:
    - new screen under `app/`
    - new component under `src/components/`
    - new domain module under `src/domain/`
-   - new key flow or significant change to an existing one (import, categorization, budget, backup)
-3. Bump `version` in `app.json`.
-4. Commit with a message like `vX.Y.Z — <one-line summary>`.
-5. Tag and push: `git tag vX.Y.Z && git push origin main --tags`.
-6. Create the GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z — …" --notes "…" --latest`. Tags alone don't show up in the Releases tab — always create the release too.
+   - new key flow or significant change to import / categorization / budget / backup
+
+### If you added a DB migration
+7. Confirm the migration is idempotent (`IF NOT EXISTS` / `try/catch` on `ALTER`) and `LATEST_DB_VERSION` was bumped.
+8. Bump `BackupData.version` in `src/db/backup.ts` if the change is non-additive (drops or renames a field).
+9. On a device with pre-migration data: open the app, confirm `slo-n-ready-backup.json` was written, confirm the changed screens load.
+
+### Version & commit
+10. Pick the version bump (semver):
+    - **MAJOR** — incompatible UX rewrite or breaking schema change
+    - **MINOR** — new user-visible feature
+    - **PATCH** — bug fixes, copy, assets, additive schema with a clean migration
+11. Bump `version` in **both** `app.json` and `package.json` — they must stay in sync.
+12. Commit: `vX.Y.Z — <one-line summary>`.
+
+### Tag, push, release
+13. Tag and push: `git tag vX.Y.Z && git push origin main --tags`
+14. Create the GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z — …" --notes "…" --latest` — summarize features, fixes, and any DB migration in plain language. Tags alone don't show up in the Releases tab — always create the release too.
 
 ## Critical conventions (don't violate without asking)
 

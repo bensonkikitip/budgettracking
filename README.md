@@ -2,13 +2,17 @@
 
 A privacy-first iOS budget tracker. All financial data lives on your device — no servers, no sync, no telemetry.
 
-## What it does (v1)
+## What it does
 
 - Add **Checking** and **Credit Card** accounts
 - Import CSVs exported from your bank; the app parses and stores only the date, amount, and description — **no account numbers or card numbers are ever stored**
 - Duplicate-safe imports: re-uploading the same CSV never creates duplicate transactions
-- View **income / expenses / net** for each account and across all accounts combined
+- View **income / expenses / net** for each account, by month or year, across all accounts combined
 - Pending transactions (from Citi CC exports) are flagged separately
+- **Categories** — create color-coded categories and assign them to transactions manually or in bulk
+- **Rules** — auto-categorize transactions on import using text or amount-based rules with AND / OR logic; drag to set priority
+- **Budget grid** — plan monthly budgets per category for the full year; see actual spend alongside your targets
+- **Backup & restore** — export a full backup to Files / AirDrop; restore from any previous backup file
 
 ## Supported CSV formats
 
@@ -49,12 +53,9 @@ You'll need [Expo Go](https://expo.dev/go) on your iPhone, or a connected iOS Si
 - **No telemetry or analytics**
 - **All data in local SQLite** at `Documents/ExpoGo/budgetapp.db` (or similar, depending on build type)
 
-## Roadmap (v2+)
+## Roadmap
 
-- **Rule-based categorization** — auto-tag transactions on import based on description / vendor / amount; manual override per transaction
-- **Monthly summary view** — by-category totals and net cash flow
 - **Budget prediction** — rolling 3-month average spend per category
-- **Charts** — spending trends over time
 - **Transaction splitting** — split one transaction across multiple categories
 - **iCloud backup** (encrypted)
 - **Additional bank CSV formats**
