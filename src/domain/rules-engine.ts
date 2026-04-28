@@ -7,7 +7,7 @@ export interface RuleAssignment {
 }
 
 export function applyRulesToTransactions(
-  transactions: Array<{ id: string; description: string; category_set_manually: number }>,
+  transactions: Array<{ id: string; description: string; amount_cents: number; category_set_manually: number }>,
   rules: Rule[],
 ): RuleAssignment[] {
   const assignments: RuleAssignment[] = [];
@@ -20,11 +20,15 @@ export function applyRulesToTransactions(
       const pattern = rule.match_text.toLowerCase();
       if (!pattern) continue;
       let matched = false;
+      const ruleAmountCents = parseInt(rule.match_text, 10);
       switch (rule.match_type) {
-        case 'contains':    matched = lower.includes(pattern);    break;
-        case 'starts_with': matched = lower.startsWith(pattern);  break;
-        case 'ends_with':   matched = lower.endsWith(pattern);    break;
-        case 'equals':      matched = lower === pattern;          break;
+        case 'contains':    matched = lower.includes(pattern);              break;
+        case 'starts_with': matched = lower.startsWith(pattern);            break;
+        case 'ends_with':   matched = lower.endsWith(pattern);              break;
+        case 'equals':      matched = lower === pattern;                    break;
+        case 'amount_eq':   matched = tx.amount_cents === ruleAmountCents;  break;
+        case 'amount_lt':   matched = tx.amount_cents < ruleAmountCents;    break;
+        case 'amount_gt':   matched = tx.amount_cents > ruleAmountCents;    break;
       }
       if (matched) {
         assignments.push({ transactionId: tx.id, categoryId: rule.category_id, ruleId: rule.id });

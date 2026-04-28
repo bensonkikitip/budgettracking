@@ -17,12 +17,43 @@ import { Sloth } from '../../../src/components/Sloth';
 import { colors, font, spacing, radius } from '../../../src/theme';
 import * as Crypto from 'expo-crypto';
 
-const MATCH_TYPES: { value: MatchType; label: string }[] = [
+const TEXT_MATCH_TYPES: { value: MatchType; label: string }[] = [
   { value: 'contains',    label: 'Contains' },
   { value: 'starts_with', label: 'Starts with' },
   { value: 'ends_with',   label: 'Ends with' },
   { value: 'equals',      label: 'Equals' },
 ];
+
+const AMOUNT_MATCH_TYPES: { value: MatchType; label: string }[] = [
+  { value: 'amount_eq', label: '=' },
+  { value: 'amount_lt', label: '<' },
+  { value: 'amount_gt', label: '>' },
+];
+
+const ALL_MATCH_TYPES = [...TEXT_MATCH_TYPES, ...AMOUNT_MATCH_TYPES];
+
+function isAmountType(t: MatchType) {
+  return t === 'amount_eq' || t === 'amount_lt' || t === 'amount_gt';
+}
+
+function centsToDisplayDollars(cents: string): string {
+  const n = parseInt(cents, 10);
+  if (isNaN(n)) return '';
+  // Keep trailing decimal if user typed it — just show the dollar value
+  return String(n / 100);
+}
+
+function displayDollarsToCents(dollars: string): number {
+  return Math.round(parseFloat(dollars) * 100);
+}
+
+function ruleMatchSummary(rule: { match_type: MatchType; match_text: string }): { typeLabel: string; valueLabel: string } {
+  if (rule.match_type === 'amount_eq') return { typeLabel: 'Amount', valueLabel: `= $${(parseInt(rule.match_text, 10) / 100).toFixed(2)}` };
+  if (rule.match_type === 'amount_lt') return { typeLabel: 'Amount', valueLabel: `< $${(parseInt(rule.match_text, 10) / 100).toFixed(2)}` };
+  if (rule.match_type === 'amount_gt') return { typeLabel: 'Amount', valueLabel: `> $${(parseInt(rule.match_text, 10) / 100).toFixed(2)}` };
+  const typeLabel = ALL_MATCH_TYPES.find(m => m.value === rule.match_type)?.label ?? rule.match_type;
+  return { typeLabel, valueLabel: `"${rule.match_text}"` };
+}
 
 // Three states for the inline category picker within the rule form
 type CatView = 'collapsed' | 'list' | 'create';
@@ -110,7 +141,7 @@ export default function AccountRulesScreen() {
   function openEditSheet(rule: RuleWithCategory) {
     setEditingRuleId(rule.id);
     setMatchType(rule.match_type);
-    setMatchText(rule.match_text);
+    setMatchText(isAmountType(rule.match_type) ? centsToDisplayDollars(rule.match_text) : rule.match_text);
     setCategoryId(rule.category_id);
     setCatView('collapsed');
     setSheetOpen(true);
@@ -162,13 +193,22 @@ export default function AccountRulesScreen() {
     })));
   }
 
+  function handleMatchTypeChange(type: MatchType) {
+    if (isAmountType(type) !== isAmountType(matchType)) setMatchText('');
+    setMatchType(type);
+  }
+
   async function handleSaveRule() {
-    const text = matchText.trim();
-    if (!text || !categoryId) return;
+    const trimmed = matchText.trim();
+    if (!trimmed || !categoryId) return;
+    const storedText = isAmountType(matchType)
+      ? String(displayDollarsToCents(trimmed))
+      : trimmed;
+    if (isAmountType(matchType) && isNaN(Number(storedText))) return;
     setSaving(true);
     try {
       if (editingRuleId) {
-        await updateRule(editingRuleId, { match_type: matchType, match_text: text, category_id: categoryId });
+        await updateRule(editingRuleId, { match_type: matchType, match_text: storedText, category_id: categoryId });
         await reloadRules();
         closeSheet();
       } else {
@@ -178,7 +218,7 @@ export default function AccountRulesScreen() {
           account_id: id,
           category_id: categoryId,
           match_type: matchType,
-          match_text: text,
+          match_text: storedText,
           priority: maxPriority + 1,
         });
         await reloadRules();
@@ -271,12 +311,16 @@ export default function AccountRulesScreen() {
           renderItem={({ item, index }) => (
             <View style={[styles.ruleRow, index > 0 && styles.rowBorder]}>
               <TouchableOpacity style={styles.ruleInfo} onPress={() => openEditSheet(item)} activeOpacity={0.6}>
-                <Text style={styles.ruleMatchLine}>
-                  <Text style={styles.ruleMatchType}>{MATCH_TYPES.find(m => m.value === item.match_type)?.label ?? item.match_type}</Text>
-                  {' "'}
-                  <Text style={styles.ruleMatchText}>{item.match_text}</Text>
-                  {'"'}
-                </Text>
+                {(() => {
+                  const { typeLabel, valueLabel } = ruleMatchSummary(item);
+                  return (
+                    <Text style={styles.ruleMatchLine}>
+                      <Text style={styles.ruleMatchType}>{typeLabel}</Text>
+                      {' '}
+                      <Text style={styles.ruleMatchText}>{valueLabel}</Text>
+                    </Text>
+                  );
+                })()}
                 <View style={styles.ruleCategoryRow}>
                   <View style={[styles.ruleCatDot, { backgroundColor: item.categoryColor }]} />
                   <Text style={styles.ruleCatName}>{item.categoryName}</Text>
@@ -316,14 +360,14 @@ export default function AccountRulesScreen() {
 
             <Text style={styles.sheetTitle}>{editingRuleId ? 'Edit Rule' : 'Add Rule'}</Text>
 
-            {/* Match type */}
-            <Text style={styles.sheetLabel}>Match type</Text>
+            {/* Match type — Description */}
+            <Text style={styles.sheetLabel}>By description</Text>
             <View style={styles.tabs}>
-              {MATCH_TYPES.map(m => (
+              {TEXT_MATCH_TYPES.map(m => (
                 <TouchableOpacity
                   key={m.value}
                   style={[styles.tab, matchType === m.value && styles.tabActive]}
-                  onPress={() => setMatchType(m.value)}
+                  onPress={() => handleMatchTypeChange(m.value)}
                   activeOpacity={0.75}
                 >
                   <Text style={[styles.tabText, matchType === m.value && styles.tabTextActive]}>
@@ -333,15 +377,49 @@ export default function AccountRulesScreen() {
               ))}
             </View>
 
-            {/* Match text */}
-            <Text style={styles.sheetLabel}>Text to match (case-insensitive)</Text>
-            <TextInput
-              style={styles.sheetInput}
-              value={matchText}
-              onChangeText={setMatchText}
-              placeholder="e.g. whole foods"
-              placeholderTextColor={colors.textTertiary}
-            />
+            {/* Match type — Amount */}
+            <Text style={styles.sheetLabel}>By amount</Text>
+            <View style={[styles.tabs, { marginBottom: spacing.md }]}>
+              {AMOUNT_MATCH_TYPES.map(m => (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.tab, styles.tabAmount, matchType === m.value && styles.tabActive]}
+                  onPress={() => handleMatchTypeChange(m.value)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.tabText, matchType === m.value && styles.tabTextActive]}>
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Match value input */}
+            {isAmountType(matchType) ? (
+              <>
+                <Text style={styles.sheetLabel}>Amount ($)</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  value={matchText}
+                  onChangeText={setMatchText}
+                  placeholder="e.g. 50.00"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.sheetLabel}>Text to match (case-insensitive)</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  value={matchText}
+                  onChangeText={setMatchText}
+                  placeholder="e.g. whole foods"
+                  placeholderTextColor={colors.textTertiary}
+                />
+              </>
+            )}
 
             {/* ── Inline category picker ── */}
             <Text style={styles.sheetLabel}>Assign category</Text>
@@ -445,9 +523,9 @@ export default function AccountRulesScreen() {
             {/* Save rule button — hide only while in create sub-form */}
             {catView !== 'create' && (
               <TouchableOpacity
-                style={[styles.saveBtn, (!matchText.trim() || !categoryId || saving) && styles.saveBtnDisabled]}
+                style={[styles.saveBtn, (!matchText.trim() || !categoryId || saving || (isAmountType(matchType) && isNaN(parseFloat(matchText)))) && styles.saveBtnDisabled]}
                 onPress={handleSaveRule}
-                disabled={!matchText.trim() || !categoryId || saving}
+                disabled={!matchText.trim() || !categoryId || saving || (isAmountType(matchType) && isNaN(parseFloat(matchText)))}
                 activeOpacity={0.85}
               >
                 <Text style={styles.saveBtnText}>
@@ -523,11 +601,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
 
-  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   tab: {
     paddingVertical: 7, paddingHorizontal: spacing.md,
     borderRadius: radius.full, backgroundColor: colors.surfaceAlt,
   },
+  tabAmount:     { minWidth: 52, alignItems: 'center' },
   tabActive:     { backgroundColor: colors.primary },
   tabText:       { fontFamily: font.semiBold, fontSize: 14, color: colors.textSecondary },
   tabTextActive: { color: colors.textOnColor },

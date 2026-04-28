@@ -56,7 +56,7 @@ export interface Category {
   created_at: number;
 }
 
-export type MatchType = 'contains' | 'starts_with' | 'ends_with' | 'equals';
+export type MatchType = 'contains' | 'starts_with' | 'ends_with' | 'equals' | 'amount_eq' | 'amount_lt' | 'amount_gt';
 
 export interface Rule {
   id: string;

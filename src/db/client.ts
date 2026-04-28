@@ -127,6 +127,35 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync('PRAGMA user_version = 5');
   }
 
+  if (version < 6) {
+    // Expand the match_type CHECK constraint to include amount_eq/lt/gt.
+    // SQLite can't ALTER a CHECK constraint, so we recreate the table.
+    try {
+      await db.execAsync('PRAGMA foreign_keys = OFF');
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS rules_new (
+          id          TEXT PRIMARY KEY,
+          account_id  TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+          match_type  TEXT NOT NULL CHECK (match_type IN (
+            'contains','starts_with','ends_with','equals',
+            'amount_eq','amount_lt','amount_gt'
+          )),
+          match_text  TEXT NOT NULL,
+          priority    INTEGER NOT NULL DEFAULT 100,
+          created_at  INTEGER NOT NULL
+        )
+      `);
+      await db.execAsync(`INSERT OR IGNORE INTO rules_new SELECT * FROM rules`);
+      await db.execAsync(`DROP TABLE IF EXISTS rules`);
+      await db.execAsync(`ALTER TABLE rules_new RENAME TO rules`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_rules_account_priority ON rules (account_id, priority ASC)`);
+    } finally {
+      await db.execAsync('PRAGMA foreign_keys = ON');
+    }
+    await db.execAsync('PRAGMA user_version = 6');
+  }
+
   _db = db;
   return db;
 }
