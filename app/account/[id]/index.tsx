@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Alert, Modal,
+  StyleSheet, ActivityIndicator, Alert, Modal, TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +41,7 @@ export default function AccountDetailScreen() {
   const [bulkMode,              setBulkMode]              = useState(false);
   const [selectedIds,           setSelectedIds]           = useState<Set<string>>(new Set());
   const [bulkPickerVisible,     setBulkPickerVisible]     = useState(false);
+  const [searchText,            setSearchText]            = useState('');
 
   const selectedMonthRef = useRef('');
   const selectedYearRef  = useRef('');
@@ -95,6 +96,7 @@ export default function AccountDetailScreen() {
     updateMonth(month);
     updateMode('month');
     setCategoryFilters([]);
+    setSearchText('');
     setTransactions(await getTransactionsForMonth(id, month));
   }
 
@@ -102,6 +104,7 @@ export default function AccountDetailScreen() {
     updateYear(year);
     updateMode('year');
     setCategoryFilters([]);
+    setSearchText('');
     setTransactions(await getTransactionsForYear(id, year));
   }
 
@@ -126,19 +129,36 @@ export default function AccountDetailScreen() {
     );
   }, [transactions, categoryFilters]);
 
+  const displayedTransactions = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return filteredTransactions;
+    return filteredTransactions.filter(t => t.description.toLowerCase().includes(q));
+  }, [filteredTransactions, searchText]);
+
   const monthSummary = useMemo(() => {
-    const active = filteredTransactions.filter(t => t.dropped_at === null);
+    const active = displayedTransactions.filter(t => t.dropped_at === null);
     return {
       income_cents:  active.filter(t => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0),
       expense_cents: active.filter(t => t.amount_cents < 0).reduce((s, t) => s + t.amount_cents, 0),
       net_cents:     active.reduce((s, t) => s + t.amount_cents, 0),
     };
-  }, [filteredTransactions]);
+  }, [displayedTransactions]);
 
   const categoryMap = useMemo(
     () => Object.fromEntries(categories.map(c => [c.id, c])),
     [categories],
   );
+
+  const allDisplayedSelected = displayedTransactions.length > 0 &&
+    displayedTransactions.every(t => selectedIds.has(t.id));
+
+  function handleSelectAll() {
+    if (allDisplayedSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayedTransactions.map(t => t.id)));
+    }
+  }
 
   function toggleSelectId(txId: string) {
     setSelectedIds(prev => {
@@ -300,14 +320,39 @@ export default function AccountDetailScreen() {
           </View>
         )}
 
+        {transactions.length > 0 && (
+          <View style={styles.searchBar}>
+            <Text style={styles.searchIcon}>⌕</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search transactions…"
+              placeholderTextColor={colors.textTertiary}
+              value={searchText}
+              onChangeText={setSearchText}
+              clearButtonMode="while-editing"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+          </View>
+        )}
+
         <SummaryBar
           incomeCents={monthSummary.income_cents}
           expenseCents={monthSummary.expense_cents}
           netCents={monthSummary.net_cents}
         />
 
+        {bulkMode && displayedTransactions.length > 0 && (
+          <TouchableOpacity style={styles.selectAllBar} onPress={handleSelectAll} activeOpacity={0.7}>
+            <Text style={styles.selectAllText}>
+              {allDisplayedSelected ? 'Deselect All' : 'Select All'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <FlatList
-          data={filteredTransactions}
+          data={displayedTransactions}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
             <TransactionRow
@@ -319,7 +364,7 @@ export default function AccountDetailScreen() {
             />
           )}
           contentContainerStyle={[
-            filteredTransactions.length === 0 && styles.emptyContainer,
+            displayedTransactions.length === 0 && styles.emptyContainer,
             { paddingBottom: insets.bottom + 88 },
           ]}
           ListEmptyComponent={
@@ -432,6 +477,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.separator,
+  },
+  searchBar: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical:   spacing.sm,
+    gap:               spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+    backgroundColor:   colors.surface,
+  },
+  searchIcon: {
+    fontSize:  19,
+    color:     colors.textTertiary,
+    marginTop: 1,
+  },
+  searchInput: {
+    flex:       1,
+    fontFamily: font.regular,
+    fontSize:   15,
+    color:      colors.text,
+    paddingVertical: 4,
+  },
+
+  selectAllBar: {
+    paddingHorizontal: spacing.md,
+    paddingVertical:   10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+    backgroundColor:   colors.surface,
+  },
+  selectAllText: {
+    fontFamily: font.semiBold,
+    fontSize:   14,
+    color:      colors.primary,
   },
 
   emptyContainer: { flex: 1 },
