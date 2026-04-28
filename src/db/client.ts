@@ -77,10 +77,17 @@ ALTER TABLE import_batches ADD COLUMN rows_dropped INTEGER NOT NULL DEFAULT 0;
 `;
 
 let _db: SQLite.SQLiteDatabase | null = null;
+let _initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (_db) return _db;
+  if (_initPromise) return _initPromise;
 
+  _initPromise = _init();
+  return _initPromise;
+}
+
+async function _init(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync('budgetapp.db');
 
   // SQLite disables FK constraints by default — enable them so ON DELETE CASCADE works
@@ -252,3 +259,4 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   _db = db;
   return db;
 }
+

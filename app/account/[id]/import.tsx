@@ -13,7 +13,7 @@ import {
   insertImportBatch, updateImportBatchCounts, ImportResult, parseColumnConfig,
   getDistinctMonths,
 } from '../../../src/db/queries';
-import { writeBackup } from '../../../src/db/backup';
+import { writeBackupSafe } from '../../../src/db/backup';
 import { autoApplyRulesForAccount } from '../../../src/domain/rules-engine';
 import { parseCsv, ParsedRow } from '../../../src/parsers';
 import { assignTransactionIds } from '../../../src/domain/transaction-id';
@@ -118,7 +118,7 @@ export default function ImportScreen() {
       // Auto-apply this account's rules to any newly uncategorized transactions
       await autoApplyRulesForAccount(accountId);
 
-      void writeBackup();
+      writeBackupSafe();
       setResult(importResult);
       setRacheyMoment(isFirstImport ? 'firstImport' : 'recurringImport');
       setPhase('done');

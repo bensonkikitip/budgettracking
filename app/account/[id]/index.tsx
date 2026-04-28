@@ -13,7 +13,7 @@ import {
   getAllCategories, setTransactionCategory, bulkManualSetCategory,
   getBudgetsForAccountYear, getActualsByCategoryMonth,
 } from '../../../src/db/queries';
-import { writeBackup } from '../../../src/db/backup';
+import { writeBackupSafe } from '../../../src/db/backup';
 import { buildMonthList, buildYearList, MonthEntry, YearEntry } from '../../../src/domain/month';
 import { monthsForPeriod } from '../../../src/domain/budget';
 import { buildCategoryRows, computeVarianceSummary } from '../../../src/domain/budget-variance';
@@ -298,7 +298,7 @@ export default function AccountDetailScreen() {
     ));
     exitBulkMode();
     setBulkPickerVisible(false);
-    void writeBackup();
+    writeBackupSafe();
     if (categoryId) setRacheyMoment('bulkCategorize');
   }
 
@@ -310,7 +310,7 @@ export default function AccountDetailScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete', style: 'destructive',
-          onPress: async () => { await deleteAccount(id); void writeBackup(); router.back(); },
+          onPress: async () => { await deleteAccount(id); writeBackupSafe(); router.back(); },
         },
       ],
     );
@@ -331,7 +331,7 @@ export default function AccountDetailScreen() {
         : t,
     ));
     setSelectedTransactionId(null);
-    void writeBackup();
+    writeBackupSafe();
     if (isFirstCategorized) setRacheyMoment('firstTransactionCategorized');
 
     if (wasUncategorized && categoryId && tx?.description) {
@@ -349,7 +349,7 @@ export default function AccountDetailScreen() {
                     ? { ...t, category_id: null, category_set_manually: 0, applied_rule_id: null }
                     : t,
                 ));
-                void writeBackup();
+                writeBackupSafe();
               },
             },
             { text: 'No thanks', style: 'cancel' },
@@ -637,7 +637,7 @@ export default function AccountDetailScreen() {
                     : t,
                 ));
                 setUndoBanner(null);
-                void writeBackup();
+                writeBackupSafe();
               }}
             >
               <Text style={styles.undoBannerAction}>Undo</Text>

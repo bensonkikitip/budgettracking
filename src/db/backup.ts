@@ -41,30 +41,30 @@ export async function getBackupInfo(): Promise<BackupInfo> {
 // IMPORTANT: writeBackup and restoreFromData must always handle the same set of tables.
 // If you add a table to one, add it to the other in the same edit.
 export async function writeBackup(): Promise<void> {
-  try {
-    const db = await getDb();
-    const [accounts, import_batches, transactions, categories, rules, budgets] = await Promise.all([
-      db.getAllAsync<any>('SELECT * FROM accounts ORDER BY created_at ASC'),
-      db.getAllAsync<any>('SELECT * FROM import_batches ORDER BY imported_at ASC'),
-      db.getAllAsync<any>('SELECT * FROM transactions ORDER BY created_at ASC'),
-      db.getAllAsync<any>('SELECT * FROM categories ORDER BY created_at ASC'),
-      db.getAllAsync<any>('SELECT * FROM rules ORDER BY priority ASC'),
-      db.getAllAsync<any>('SELECT * FROM budgets ORDER BY account_id, category_id, month'),
-    ]);
-    const data: BackupData = {
-      version:        3,
-      exported_at:    Date.now(),
-      accounts,
-      import_batches,
-      transactions,
-      categories,
-      rules,
-      budgets,
-    };
-    await FileSystem.writeAsStringAsync(BACKUP_PATH, JSON.stringify(data));
-  } catch {
-    // Backup failures are silent — don't interrupt user flow
-  }
+  const db = await getDb();
+  const [accounts, import_batches, transactions, categories, rules, budgets] = await Promise.all([
+    db.getAllAsync<any>('SELECT * FROM accounts ORDER BY created_at ASC'),
+    db.getAllAsync<any>('SELECT * FROM import_batches ORDER BY imported_at ASC'),
+    db.getAllAsync<any>('SELECT * FROM transactions ORDER BY created_at ASC'),
+    db.getAllAsync<any>('SELECT * FROM categories ORDER BY created_at ASC'),
+    db.getAllAsync<any>('SELECT * FROM rules ORDER BY priority ASC'),
+    db.getAllAsync<any>('SELECT * FROM budgets ORDER BY account_id, category_id, month'),
+  ]);
+  const data: BackupData = {
+    version:        3,
+    exported_at:    Date.now(),
+    accounts,
+    import_batches,
+    transactions,
+    categories,
+    rules,
+    budgets,
+  };
+  await FileSystem.writeAsStringAsync(BACKUP_PATH, JSON.stringify(data));
+}
+
+export function writeBackupSafe(): void {
+  writeBackup().catch(e => console.warn('[backup] auto-save failed:', e));
 }
 
 export async function readBackupFromPath(uri: string): Promise<BackupData | null> {

@@ -21,7 +21,7 @@ import { CategoryPickerSheet } from '../src/components/CategoryPickerSheet';
 import { ActivityBudgetToggle } from '../src/components/ActivityBudgetToggle';
 import { BudgetView } from '../src/components/BudgetView';
 import { Sloth } from '../src/components/Sloth';
-import { writeBackup } from '../src/db/backup';
+import { writeBackupSafe } from '../src/db/backup';
 import { colors, font, spacing, radius } from '../src/theme';
 import { centsToDollars } from '../src/domain/money';
 
@@ -273,7 +273,7 @@ export default function AllAccountsScreen() {
         : t,
     ));
     setSelectedTransactionId(null);
-    void writeBackup();
+    writeBackupSafe();
     if (wasUncategorized && categoryId && tx?.description && tx?.account_id) {
       const acct = accountMap[tx.account_id];
       if (acct?.suggest_rules !== 0) {
@@ -290,7 +290,7 @@ export default function AllAccountsScreen() {
                     ? { ...t, category_id: null, category_set_manually: 0, applied_rule_id: null }
                     : t,
                 ));
-                void writeBackup();
+                writeBackupSafe();
               },
             },
             { text: 'No thanks', style: 'cancel' },
@@ -482,7 +482,7 @@ export default function AllAccountsScreen() {
                     : t,
                 ));
                 setUndoBanner(null);
-                void writeBackup();
+                writeBackupSafe();
               }}
             >
               <Text style={styles.undoBannerAction}>Undo</Text>

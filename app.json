@@ -3,7 +3,7 @@
     "name": "Slo N Ready",
     "slug": "slo-n-ready",
     "scheme": "slonready",
-    "version": "3.1.1",
+    "version": "3.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.slo-n-ready"
+      "bundleIdentifier": "com.kiip.slonready",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,6 +35,12 @@
       "expo-router",
       "expo-sqlite",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1218149e-e25e-468a-8be2-ebd8cf07c081"
+      }
+    }
   }
 }

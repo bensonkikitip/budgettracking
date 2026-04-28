@@ -8,8 +8,9 @@ import {
   Account, AccountType, CsvFormat,
   getAllAccounts, getTransactions, updateAccount, deleteAccount, parseColumnConfig,
 } from '../../../src/db/queries';
-import { writeBackup } from '../../../src/db/backup';
-import { ColumnConfig, DEFAULT_CONFIGS, DateFormat, AmountStyle } from '../../../src/parsers/column-config';
+import { writeBackupSafe } from '../../../src/db/backup';
+import { ColumnConfig, DEFAULT_CONFIGS } from '../../../src/parsers/column-config';
+import { ColumnMappingForm } from '../../../src/components/ColumnMappingForm';
 import { colors, font, spacing, radius, accountColor } from '../../../src/theme';
 
 const ACCOUNT_TYPES: { label: string; value: AccountType; emoji: string }[] = [
@@ -22,7 +23,6 @@ const CSV_FORMATS: { label: string; value: CsvFormat; forType: AccountType }[] =
   { label: 'Citi – Credit Card',         value: 'citi_cc_v1',      forType: 'credit_card' },
 ];
 
-const DATE_FORMATS: DateFormat[] = ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'];
 
 export default function EditAccountScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -85,12 +85,17 @@ export default function EditAccountScreen() {
   }
 
   function handleReset() {
+    const defaults = DEFAULT_CONFIGS[csvFormat];
+    if (!defaults) {
+      Alert.alert('No template', 'This account uses a custom mapping — there is no built-in template to reset to. Edit the fields above to fix the mapping.');
+      return;
+    }
     Alert.alert(
       'Reset to Defaults?',
       "This will restore the default column mapping for this account's format template.",
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', onPress: () => setConfig(DEFAULT_CONFIGS[csvFormat]) },
+        { text: 'Reset', onPress: () => setConfig(defaults) },
       ],
     );
   }
@@ -108,7 +113,7 @@ export default function EditAccountScreen() {
         csv_format:    csvFormat,
         column_config: JSON.stringify(config),
       });
-      void writeBackup();
+      writeBackupSafe();
       router.back();
     } catch {
       Alert.alert('Error', 'Could not save changes. Please try again.');
@@ -178,165 +183,7 @@ export default function EditAccountScreen() {
 
         {/* ── CSV Column Mapping ── */}
         <Text style={styles.sectionLabel}>CSV COLUMN MAPPING</Text>
-
-        <Text style={styles.fieldLabel}>Date column name</Text>
-        <View style={styles.card}>
-          <TextInput
-            style={styles.input}
-            value={config.dateColumn}
-            onChangeText={v => patchConfig({ dateColumn: v })}
-            placeholderTextColor={colors.textTertiary}
-            autoCapitalize="words"
-            returnKeyType="done"
-          />
-        </View>
-
-        <Text style={styles.fieldLabel}>Description column name</Text>
-        <View style={styles.card}>
-          <TextInput
-            style={styles.input}
-            value={config.descriptionColumn}
-            onChangeText={v => patchConfig({ descriptionColumn: v })}
-            placeholderTextColor={colors.textTertiary}
-            autoCapitalize="words"
-            returnKeyType="done"
-          />
-        </View>
-
-        <Text style={styles.fieldLabel}>Date format</Text>
-        <View style={[styles.card, styles.segmentRow]}>
-          {DATE_FORMATS.map((fmt, i) => (
-            <TouchableOpacity
-              key={fmt}
-              style={[
-                styles.segment,
-                i > 0 && styles.segmentBorder,
-                config.dateFormat === fmt && { backgroundColor: accent },
-              ]}
-              onPress={() => patchConfig({ dateFormat: fmt })}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.segmentText,
-                config.dateFormat === fmt && styles.segmentTextActive,
-              ]}>
-                {fmt}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.fieldLabel}>Amount style</Text>
-        <View style={[styles.card, styles.segmentRow]}>
-          {(['signed', 'debit_credit'] as AmountStyle[]).map((val, i) => (
-            <TouchableOpacity
-              key={val}
-              style={[
-                styles.segment,
-                i > 0 && styles.segmentBorder,
-                config.amountStyle === val && { backgroundColor: accent },
-              ]}
-              onPress={() => patchConfig({ amountStyle: val })}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.segmentText,
-                config.amountStyle === val && styles.segmentTextActive,
-              ]}>
-                {val === 'signed' ? 'Single Column' : 'Debit / Credit'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* ── Signed amount fields ── */}
-        {config.amountStyle === 'signed' && (
-          <>
-            <Text style={styles.fieldLabel}>Amount column name</Text>
-            <View style={styles.card}>
-              <TextInput
-                style={styles.input}
-                value={config.signedAmountColumn ?? ''}
-                onChangeText={v => patchConfig({ signedAmountColumn: v })}
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="words"
-                returnKeyType="done"
-              />
-            </View>
-
-            <Text style={styles.fieldLabel}>Skip preamble until header contains (optional)</Text>
-            <View style={styles.card}>
-              <TextInput
-                style={styles.input}
-                value={config.headerContains ?? ''}
-                onChangeText={v => patchConfig({ headerContains: v || undefined })}
-                placeholder="e.g. Date,Description,Amount"
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="none"
-                returnKeyType="done"
-              />
-            </View>
-          </>
-        )}
-
-        {/* ── Debit / Credit fields ── */}
-        {config.amountStyle === 'debit_credit' && (
-          <>
-            <Text style={styles.fieldLabel}>Debit column name</Text>
-            <View style={styles.card}>
-              <TextInput
-                style={styles.input}
-                value={config.debitColumn ?? ''}
-                onChangeText={v => patchConfig({ debitColumn: v })}
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="words"
-                returnKeyType="done"
-              />
-            </View>
-
-            <Text style={styles.fieldLabel}>Credit column name</Text>
-            <View style={styles.card}>
-              <TextInput
-                style={styles.input}
-                value={config.creditColumn ?? ''}
-                onChangeText={v => patchConfig({ creditColumn: v })}
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="words"
-                returnKeyType="done"
-              />
-            </View>
-
-            <Text style={styles.fieldLabel}>Pending status column (optional)</Text>
-            <View style={styles.card}>
-              <TextInput
-                style={styles.input}
-                value={config.pendingColumn ?? ''}
-                onChangeText={v => patchConfig({ pendingColumn: v || undefined })}
-                placeholder="e.g. Status"
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="words"
-                returnKeyType="done"
-              />
-            </View>
-
-            {!!config.pendingColumn && (
-              <>
-                <Text style={styles.fieldLabel}>Cleared value</Text>
-                <View style={styles.card}>
-                  <TextInput
-                    style={styles.input}
-                    value={config.clearedValue ?? ''}
-                    onChangeText={v => patchConfig({ clearedValue: v || undefined })}
-                    placeholder="e.g. Cleared"
-                    placeholderTextColor={colors.textTertiary}
-                    autoCapitalize="words"
-                    returnKeyType="done"
-                  />
-                </View>
-              </>
-            )}
-          </>
-        )}
+        <ColumnMappingForm config={config} onChange={patchConfig} accentColor={accent} />
 
         <Text style={styles.hint}>
           Changes apply to new imports only — existing transactions are not re-parsed.
@@ -367,7 +214,7 @@ export default function EditAccountScreen() {
                   text: 'Delete', style: 'destructive',
                   onPress: async () => {
                     await deleteAccount(id);
-                    void writeBackup();
+                    writeBackupSafe();
                     router.replace('/');
                   },
                 },
@@ -398,15 +245,6 @@ const styles = StyleSheet.create({
     marginBottom:  spacing.xs,
     marginLeft:    spacing.xs,
   },
-  fieldLabel: {
-    fontFamily:   font.regular,
-    fontSize:     13,
-    color:        colors.textSecondary,
-    marginTop:    spacing.sm,
-    marginBottom: spacing.xs,
-    marginLeft:   spacing.xs,
-  },
-
   card: {
     backgroundColor: colors.surface,
     borderRadius:    radius.lg,
@@ -439,20 +277,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical:   14,
   },
-
-  segmentRow: { flexDirection: 'row' },
-  segment: {
-    flex:           1,
-    paddingVertical: 13,
-    alignItems:     'center',
-  },
-  segmentBorder: { borderLeftWidth: 1, borderLeftColor: colors.border },
-  segmentText: {
-    fontFamily: font.semiBold,
-    fontSize:   13,
-    color:      colors.textSecondary,
-  },
-  segmentTextActive: { color: colors.textOnColor },
 
   hint: {
     fontFamily: font.regular,

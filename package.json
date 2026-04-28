@@ -1,6 +1,6 @@
 {
   "name": "budgetapp",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -34,11 +34,12 @@
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
     "expo": "~54.0.33",
+    "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.9",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.22",
     "expo-font": "~14.0.11",
-    "expo-linking": "^55.0.14",
+    "expo-linking": "~8.0.11",
     "expo-router": "~6.0.23",
     "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",

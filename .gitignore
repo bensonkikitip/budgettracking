@@ -46,5 +46,8 @@ local-data/
 *.db
 # Local backup file (on-device data snapshot, not version-controlled)
 slo-n-ready-backup.json
+
+# App Store submission screenshots (build artifacts, not source)
+Screenshots for AppStore/
 # Exception: synthetic test fixtures are safe to commit (no real financial data)
 !tests/fixtures/*.csv

@@ -52,6 +52,36 @@ Run before every release. Pre-flight steps are non-negotiable.
 14. Tag and push: `git tag vX.Y.Z && git push origin main --tags`
 15. Create the GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z — …" --notes "…" --latest` — summarize features, fixes, and any DB migration in plain language. Tags alone don't show up in the Releases tab — always create the release too.
 
+## EAS / App Store build checklist
+
+Run before every `eas build` attempt. These catch the dependency issues that silently break cloud builds.
+
+### How versioning works (read this once)
+- **Marketing version** (`3.1.1` etc.) — you manage this. Bump it in `app.json` AND `package.json` together before building.
+- **Build number** (`CFBundleVersion`) — EAS manages this automatically via `appVersionSource: "remote"` + `autoIncrement: true`. Never edit it manually.
+- **`ios/SloNReady/Info.plist`** — EAS overwrites `CFBundleShortVersionString` and `CFBundleVersion` from `app.json` on every build. Do not edit the plist manually for version changes.
+
+### Dependency health (run in order)
+1. `npx expo-doctor@latest` — must show **17/17 checks passed**. Fix any failures before continuing.
+2. `npx expo install --check` — must show **Dependencies are up to date**. If it lists packages to update, run `npx expo install <package>` for each one.
+3. Confirm `.npmrc` exists at the project root and contains `legacy-peer-deps=true`. This is required to suppress optional peer dep conflicts from expo-router's web dependencies.
+
+### Config sanity
+4. `app.json` and `package.json` must have the **same `version`** value.
+5. `app.json` `bundleIdentifier` must be `com.kiip.slonready` (never `com.anonymous.*`).
+6. `app.json` must contain an `extra.eas.projectId` field (added by `eas build:configure`).
+
+### Pre-build
+7. `npm test` — must pass.
+8. `npm run typecheck` — must pass.
+9. Commit all changes: `git add -p && git commit` — build from a clean, committed state so the build is traceable.
+
+### Build & submit
+10. `eas build --platform ios --profile production` — wait for "Build successful" (~15–25 min).
+11. Install via **TestFlight** and smoke-test before submitting to App Store review.
+12. `eas submit --platform ios --latest` — pushes the build to App Store Connect.
+13. In **App Store Connect**: add the build to the version, fill in "What's New", then click **Submit for Review**.
+
 ## Critical conventions (don't violate without asking)
 
 - **Money is always `INTEGER` cents.** Never store dollars as floats. Negative = expense / debit, positive = income / credit. Use `centsToDollars` / `parseDollarsToCents` in `src/domain/money.ts`.

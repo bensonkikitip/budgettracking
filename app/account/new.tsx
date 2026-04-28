@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ScrollView,
+  StyleSheet, Alert, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { AccountType, CsvFormat, insertAccount } from '../../src/db/queries';
-import { DEFAULT_CONFIGS } from '../../src/parsers/column-config';
-import { writeBackup } from '../../src/db/backup';
+import { ColumnConfig, DEFAULT_CONFIGS } from '../../src/parsers/column-config';
+import { detectColumnConfig } from '../../src/parsers/column-detector';
+import { GenericRow } from '../../src/parsers/generic-parser';
+import { ColumnMappingForm } from '../../src/components/ColumnMappingForm';
+import { centsToDollars } from '../../src/domain/money';
+import { writeBackupSafe } from '../../src/db/backup';
 import { colors, font, spacing, radius, accountColor } from '../../src/theme';
 
 const ACCOUNT_TYPES: { label: string; value: AccountType; emoji: string }[] = [
@@ -15,25 +21,65 @@ const ACCOUNT_TYPES: { label: string; value: AccountType; emoji: string }[] = [
   { label: 'Credit Card', value: 'credit_card', emoji: '💳' },
 ];
 
-const CSV_FORMATS: { label: string; value: CsvFormat; forType: AccountType }[] = [
-  { label: 'Bank of America – Checking', value: 'boa_checking_v1', forType: 'checking'    },
-  { label: 'Citi – Credit Card',         value: 'citi_cc_v1',      forType: 'credit_card' },
-];
-
 export default function AddAccountScreen() {
   const router = useRouter();
-  const [name,      setName]      = useState('');
-  const [type,      setType]      = useState<AccountType>('checking');
-  const [csvFormat, setCsvFormat] = useState<CsvFormat>('boa_checking_v1');
-  const [saving,    setSaving]    = useState(false);
+
+  const [name,        setName]        = useState('');
+  const [type,        setType]        = useState<AccountType>('checking');
+  const [config,      setConfig]      = useState<ColumnConfig | null>(null);
+  const [sampleRows,  setSampleRows]  = useState<GenericRow[]>([]);
+  const [csvFilename, setCsvFilename] = useState<string | null>(null);
+  const [detecting,   setDetecting]   = useState(false);
+  const [saving,      setSaving]      = useState(false);
 
   const accentColor = accountColor[type];
-  const availableFormats = CSV_FORMATS.filter(f => f.forType === type);
 
-  function handleTypeChange(newType: AccountType) {
-    setType(newType);
-    const def = CSV_FORMATS.find(f => f.forType === newType);
-    if (def) setCsvFormat(def.value);
+  function patchConfig(patch: Partial<ColumnConfig>) {
+    setConfig(prev => prev ? { ...prev, ...patch } : prev);
+  }
+
+  async function handlePickCsv() {
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values',
+               'public.comma-separated-values-text', '*/*'],
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      setDetecting(true);
+
+      const text = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      const result = detectColumnConfig(text);
+
+      if (result.warnings.length > 0) {
+        Alert.alert(
+          'Heads up',
+          result.warnings.join('\n\n') + '\n\nYou can fix the column names below before saving.',
+        );
+      }
+
+      setConfig(result.config);
+      setSampleRows(result.sampleRows);
+      setCsvFilename(asset.name ?? 'file.csv');
+    } catch (e: any) {
+      Alert.alert('Could not read file', e.message ?? 'Unknown error');
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  function isMappingValid(): boolean {
+    if (!config) return false;
+    if (!config.dateColumn.trim() || !config.descriptionColumn.trim()) return false;
+    if (config.amountStyle === 'signed' && !config.signedAmountColumn?.trim()) return false;
+    if (config.amountStyle === 'debit_credit') {
+      if (!config.debitColumn?.trim() || !config.creditColumn?.trim()) return false;
+    }
+    return true;
   }
 
   async function handleSave() {
@@ -41,18 +87,28 @@ export default function AddAccountScreen() {
       Alert.alert('Name required', 'Please give this account a name.');
       return;
     }
+    if (!config) {
+      Alert.alert('CSV required', 'Please choose a sample CSV file first so I can detect the column layout.');
+      return;
+    }
+    if (!isMappingValid()) {
+      Alert.alert('Mapping incomplete', 'Please fill in all required column fields before saving.');
+      return;
+    }
+
     setSaving(true);
     try {
+      const csvFormat: CsvFormat = 'custom';
       await insertAccount({
         id:            Crypto.randomUUID(),
         name:          name.trim(),
         type,
         csv_format:    csvFormat,
-        column_config: JSON.stringify(DEFAULT_CONFIGS[csvFormat]),
+        column_config: JSON.stringify(config),
         suggest_rules: 1,
         created_at:    Date.now(),
       });
-      void writeBackup();
+      writeBackupSafe();
       router.back();
     } catch {
       Alert.alert('Error', 'Could not save account. Please try again.');
@@ -61,13 +117,15 @@ export default function AddAccountScreen() {
     }
   }
 
+  const canSave = !!name.trim() && isMappingValid() && !saving;
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Account type picker — shown first so the accent color responds immediately */}
+      {/* ── Account Type ── */}
       <Text style={styles.sectionLabel}>ACCOUNT TYPE</Text>
       <View style={styles.card}>
         {ACCOUNT_TYPES.map((t, i) => (
@@ -78,7 +136,7 @@ export default function AddAccountScreen() {
               i > 0 && styles.optionBorder,
               type === t.value && { backgroundColor: colors.primaryLight },
             ]}
-            onPress={() => handleTypeChange(t.value)}
+            onPress={() => setType(t.value)}
             activeOpacity={0.7}
           >
             <Text style={styles.optionEmoji}>{t.emoji}</Text>
@@ -92,11 +150,12 @@ export default function AddAccountScreen() {
         ))}
       </View>
 
+      {/* ── Account Name ── */}
       <Text style={styles.sectionLabel}>ACCOUNT NAME</Text>
       <View style={styles.card}>
         <TextInput
           style={styles.input}
-          placeholder="e.g. BoA Checking, Citi Rewards"
+          placeholder="e.g. Chase Checking, Amex Gold"
           placeholderTextColor={colors.textTertiary}
           value={name}
           onChangeText={setName}
@@ -105,36 +164,71 @@ export default function AddAccountScreen() {
         />
       </View>
 
-      <Text style={styles.sectionLabel}>CSV FORMAT</Text>
-      <View style={styles.card}>
-        {availableFormats.map((f, i) => (
-          <TouchableOpacity
-            key={f.value}
-            style={[
-              styles.option,
-              i > 0 && styles.optionBorder,
-              csvFormat === f.value && { backgroundColor: colors.primaryLight },
-            ]}
-            onPress={() => setCsvFormat(f.value)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.optionLabel, csvFormat === f.value && { color: accentColor }]}>
-              {f.label}
-            </Text>
-            {csvFormat === f.value && (
-              <Text style={[styles.check, { color: accentColor }]}>✓</Text>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-      <Text style={styles.hint}>
-        This tells me how to read your bank's CSV — pick the one that matches your bank.
-      </Text>
+      {/* ── CSV Setup ── */}
+      <Text style={styles.sectionLabel}>CSV COLUMN SETUP</Text>
 
       <TouchableOpacity
-        style={[styles.saveButton, { backgroundColor: accentColor }, saving && styles.disabled]}
+        style={[styles.csvPickButton, { borderColor: accentColor }, detecting && styles.disabled]}
+        onPress={handlePickCsv}
+        disabled={detecting}
+        activeOpacity={0.8}
+      >
+        {detecting ? (
+          <ActivityIndicator color={accentColor} style={styles.spinner} />
+        ) : null}
+        <Text style={[styles.csvPickLabel, { color: accentColor }]}>
+          {csvFilename
+            ? `✓ ${csvFilename} — tap to change`
+            : 'Choose a sample CSV from your bank'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.hint}>
+        I'll read the column headers and auto-detect which columns hold the date, description, and amount. You can fix anything that looks wrong below.
+      </Text>
+
+      {/* ── Detected mapping form ── */}
+      {config && (
+        <>
+          <Text style={styles.sectionLabel}>DETECTED COLUMN MAPPING</Text>
+          <ColumnMappingForm
+            config={config}
+            onChange={patchConfig}
+            accentColor={accentColor}
+          />
+
+          {/* ── Preview table ── */}
+          {sampleRows.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>PREVIEW (FIRST {sampleRows.length} ROWS)</Text>
+              <View style={styles.previewCard}>
+                <View style={[styles.previewRow, styles.previewHeader]}>
+                  <Text style={[styles.previewCell, styles.previewHeaderText, styles.cellDate]}>Date</Text>
+                  <Text style={[styles.previewCell, styles.previewHeaderText, styles.cellDesc]}>Description</Text>
+                  <Text style={[styles.previewCell, styles.previewHeaderText, styles.cellAmt]}>Amount</Text>
+                </View>
+                {sampleRows.map((row, i) => (
+                  <View key={i} style={[styles.previewRow, i > 0 && styles.previewRowBorder]}>
+                    <Text style={[styles.previewCell, styles.cellDate]} numberOfLines={1}>{row.dateIso}</Text>
+                    <Text style={[styles.previewCell, styles.cellDesc]} numberOfLines={1}>{row.originalDescription}</Text>
+                    <Text style={[styles.previewCell, styles.cellAmt, { color: row.amountCents < 0 ? colors.destructive : colors.income }]} numberOfLines={1}>
+                      {centsToDollars(row.amountCents)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.hint}>
+                If these look right, you're good to go. If not, adjust the column names above.
+              </Text>
+            </>
+          )}
+        </>
+      )}
+
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: accentColor }, !canSave && styles.disabled]}
         onPress={handleSave}
-        disabled={saving}
+        disabled={!canSave}
         activeOpacity={0.85}
       >
         <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Add Account'}</Text>
@@ -145,16 +239,16 @@ export default function AddAccountScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content:   { padding: spacing.md, gap: spacing.sm },
+  content:   { padding: spacing.md, gap: spacing.sm, paddingBottom: spacing.xxl },
 
   sectionLabel: {
-    fontFamily:   font.semiBold,
-    fontSize:     11,
-    color:        colors.textTertiary,
+    fontFamily:    font.semiBold,
+    fontSize:      11,
+    color:         colors.textTertiary,
     letterSpacing: 0.8,
-    marginTop:    spacing.md,
-    marginBottom: spacing.xs,
-    marginLeft:   spacing.xs,
+    marginTop:     spacing.md,
+    marginBottom:  spacing.xs,
+    marginLeft:    spacing.xs,
   },
 
   card: {
@@ -166,11 +260,11 @@ const styles = StyleSheet.create({
   },
 
   option: {
-    flexDirection:  'row',
-    alignItems:     'center',
+    flexDirection:     'row',
+    alignItems:        'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    gap:            spacing.sm,
+    paddingVertical:   14,
+    gap:               spacing.sm,
   },
   optionBorder: {
     borderTopWidth: 1,
@@ -189,11 +283,29 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    fontFamily:   font.regular,
-    fontSize:     15,
-    color:        colors.text,
+    fontFamily:        font.regular,
+    fontSize:          15,
+    color:             colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical:   14,
+  },
+
+  csvPickButton: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     1.5,
+    borderStyle:     'dashed',
+    borderRadius:    radius.lg,
+    paddingVertical: 18,
+    paddingHorizontal: spacing.md,
+    gap:             spacing.xs,
+  },
+  spinner: { marginRight: spacing.xs },
+  csvPickLabel: {
+    fontFamily: font.semiBold,
+    fontSize:   15,
+    textAlign:  'center',
   },
 
   hint: {
@@ -204,13 +316,47 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  previewCard: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.lg,
+    overflow:        'hidden',
+    borderWidth:     1,
+    borderColor:     colors.border,
+  },
+  previewRow: {
+    flexDirection:     'row',
+    paddingHorizontal: spacing.sm,
+    paddingVertical:   10,
+    alignItems:        'center',
+  },
+  previewRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.separator,
+  },
+  previewHeader: {
+    backgroundColor: colors.background,
+  },
+  previewHeaderText: {
+    fontFamily: font.semiBold,
+    color:      colors.textSecondary,
+  },
+  previewCell: {
+    fontFamily: font.regular,
+    fontSize:   12,
+    color:      colors.text,
+    paddingHorizontal: 2,
+  },
+  cellDate: { width: 90 },
+  cellDesc: { flex: 1 },
+  cellAmt:  { width: 80, textAlign: 'right' },
+
   saveButton: {
     borderRadius:    radius.full,
     paddingVertical: 16,
     alignItems:      'center',
     marginTop:       spacing.lg,
   },
-  disabled: { opacity: 0.6 },
+  disabled:       { opacity: 0.6 },
   saveButtonText: {
     fontFamily: font.bold,
     fontSize:   17,

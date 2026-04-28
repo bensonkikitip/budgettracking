@@ -2,7 +2,7 @@ import { getDb } from './client';
 import { ColumnConfig, DEFAULT_CONFIGS } from '../parsers/column-config';
 
 export type AccountType = 'checking' | 'credit_card';
-export type CsvFormat = 'boa_checking_v1' | 'citi_cc_v1';
+export type CsvFormat = 'boa_checking_v1' | 'citi_cc_v1' | 'custom';
 
 export interface Account {
   id: string;
@@ -692,13 +692,17 @@ export async function bulkManualSetCategory(
 ): Promise<void> {
   if (transactionIds.length === 0) return;
   const db = await getDb();
+  // Chunk to stay within SQLite's default 999-variable limit
+  const CHUNK = 500;
   await db.withTransactionAsync(async () => {
-    for (const id of transactionIds) {
+    for (let i = 0; i < transactionIds.length; i += CHUNK) {
+      const chunk = transactionIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => '?').join(', ');
       await db.runAsync(
         `UPDATE transactions
          SET category_id = ?, category_set_manually = 1, applied_rule_id = NULL
-         WHERE id = ?`,
-        categoryId, id,
+         WHERE id IN (${placeholders})`,
+        categoryId, ...chunk,
       );
     }
   });
@@ -709,13 +713,27 @@ export async function bulkSetTransactionCategories(
 ): Promise<void> {
   if (assignments.length === 0) return;
   const db = await getDb();
+  // Each row uses 3 variables; chunk to stay well under the 999-variable SQLite limit
+  const CHUNK = 100;
   await db.withTransactionAsync(async () => {
-    for (const a of assignments) {
+    for (let i = 0; i < assignments.length; i += CHUNK) {
+      const chunk = assignments.slice(i, i + CHUNK);
+      const setCategoryCase  = chunk.map(() => 'WHEN id = ? THEN ?').join(' ');
+      const setRuleCase      = chunk.map(() => 'WHEN id = ? THEN ?').join(' ');
+      const inPlaceholders   = chunk.map(() => '?').join(', ');
+      const params: (string | null)[] = [
+        ...chunk.flatMap(a => [a.transactionId, a.categoryId]),
+        ...chunk.flatMap(a => [a.transactionId, a.ruleId]),
+        ...chunk.map(a => a.transactionId),
+      ];
       await db.runAsync(
         `UPDATE transactions
-         SET category_id = ?, category_set_manually = 0, applied_rule_id = ?
-         WHERE id = ? AND category_set_manually = 0`,
-        a.categoryId, a.ruleId, a.transactionId,
+         SET category_id      = CASE ${setCategoryCase} ELSE category_id END,
+             applied_rule_id  = CASE ${setRuleCase} ELSE applied_rule_id END,
+             category_set_manually = 0
+         WHERE id IN (${inPlaceholders})
+           AND category_set_manually = 0`,
+        ...params,
       );
     }
   });

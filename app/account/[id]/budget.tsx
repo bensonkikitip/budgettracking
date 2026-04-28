@@ -11,7 +11,7 @@ import {
   getBudgetsForAccountYear, setBudget, bulkSetBudgets, replaceBudgetsForYear,
   getActualsByCategoryMonth,
 } from '../../../src/db/queries';
-import { writeBackup } from '../../../src/db/backup';
+import { writeBackupSafe } from '../../../src/db/backup';
 import { centsToDollars } from '../../../src/domain/money';
 import {
   splitYearTotal, computeYearTotal, applyPercentage, monthsInYear,
@@ -159,7 +159,7 @@ export default function BudgetScreen() {
       patchCell(categoryId, month, cents);
       await setBudget(id, categoryId, month, cents);
     }
-    void writeBackup();
+    writeBackupSafe();
   }
 
   // ── Fill from actuals ──────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ export default function BudgetScreen() {
     // are touched — existing budgets for future months are preserved.
     await bulkSetBudgets(rows);
     patchCells(rows);
-    void writeBackup();
+    writeBackupSafe();
   }
 
   // ── Fill from last year + % ────────────────────────────────────────────────
@@ -208,7 +208,7 @@ export default function BudgetScreen() {
     } else {
       patchAll(buildMap(rows));
     }
-    void writeBackup();
+    writeBackupSafe();
   }
 
   // ── Clear ──────────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ export default function BudgetScreen() {
     } else {
       patchAll(new Map());
     }
-    void writeBackup();
+    writeBackupSafe();
   }
 
   // ── Row actions ────────────────────────────────────────────────────────────

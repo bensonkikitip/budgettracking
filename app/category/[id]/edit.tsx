@@ -6,6 +6,7 @@ import {
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { getAllCategories, updateCategory, deleteCategory } from '../../../src/db/queries';
 import { CATEGORY_COLORS } from '../../../src/domain/category-colors';
+import { friendlyError } from '../../../src/domain/errors';
 import { colors, font, spacing, radius } from '../../../src/theme';
 
 export default function EditCategoryScreen() {
@@ -17,9 +18,13 @@ export default function EditCategoryScreen() {
 
   useEffect(() => {
     (async () => {
-      const cats = await getAllCategories();
-      const cat  = cats.find(c => c.id === id);
-      if (cat) { setName(cat.name); setSelectedColor(cat.color); }
+      try {
+        const cats = await getAllCategories();
+        const cat  = cats.find(c => c.id === id);
+        if (cat) { setName(cat.name); setSelectedColor(cat.color); }
+      } catch (e) {
+        Alert.alert('Error', friendlyError(e));
+      }
     })();
   }, [id]);
 
@@ -45,8 +50,12 @@ export default function EditCategoryScreen() {
         {
           text: 'Delete', style: 'destructive',
           onPress: async () => {
-            await deleteCategory(id);
-            router.back();
+            try {
+              await deleteCategory(id);
+              router.back();
+            } catch (e) {
+              Alert.alert('Could not delete', friendlyError(e));
+            }
           },
         },
       ],
