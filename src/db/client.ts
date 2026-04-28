@@ -1,4 +1,34 @@
 import * as SQLite from 'expo-sqlite';
+import * as FileSystem from 'expo-file-system/legacy';
+
+const LATEST_DB_VERSION = 6;
+
+// Written before any migration runs so the user can always roll back.
+// Uses the same path and format as writeBackup() in backup.ts.
+// Each table query is individually guarded — if a table doesn't exist yet
+// (e.g. rules before migration 005) it is recorded as an empty array.
+async function writePreMigrationBackup(db: SQLite.SQLiteDatabase): Promise<void> {
+  try {
+    const safe = async (sql: string) => {
+      try { return await db.getAllAsync<any>(sql); } catch { return []; }
+    };
+    const [accounts, import_batches, transactions, categories, rules] = await Promise.all([
+      safe('SELECT * FROM accounts ORDER BY created_at ASC'),
+      safe('SELECT * FROM import_batches ORDER BY imported_at ASC'),
+      safe('SELECT * FROM transactions ORDER BY created_at ASC'),
+      safe('SELECT * FROM categories ORDER BY created_at ASC'),
+      safe('SELECT * FROM rules ORDER BY priority ASC'),
+    ]);
+    const payload = JSON.stringify({
+      version: 2, exported_at: Date.now(),
+      accounts, import_batches, transactions, categories, rules,
+    });
+    const path = (FileSystem.documentDirectory ?? '') + 'slo-n-ready-backup.json';
+    await FileSystem.writeAsStringAsync(path, payload);
+  } catch {
+    // Never block a migration because a backup failed
+  }
+}
 
 const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -62,6 +92,11 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   // Run any pending migrations
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = versionRow?.user_version ?? 0;
+
+  // Snapshot data before any migration so the user can always restore if something goes wrong
+  if (version < LATEST_DB_VERSION) {
+    await writePreMigrationBackup(db);
+  }
 
   if (version < 2) {
     // ALTER TABLE is not transactional in SQLite, so we run each statement
