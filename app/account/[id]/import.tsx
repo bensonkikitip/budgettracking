@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   Alert, ScrollView, ActivityIndicator, Linking,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack, Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -163,6 +163,9 @@ export default function ImportScreen() {
             <Text style={styles.pickBody}>
               Hand me a CSV from your bank and I'll show you a preview before saving anything.
             </Text>
+            <Link href="/help/csv-guide" style={styles.csvGuideLink}>
+              How do I export a CSV from my bank? →
+            </Link>
             {loading
               ? <ActivityIndicator color={accent} style={{ marginTop: spacing.lg }} />
               : (
@@ -321,6 +324,9 @@ const styles = StyleSheet.create({
   pickBody: {
     fontFamily: font.regular, fontSize: 15, color: colors.textSecondary,
     textAlign: 'center', lineHeight: 22,
+  },
+  csvGuideLink: {
+    fontFamily: font.semiBold, fontSize: 13, color: colors.primary,
   },
 
   // Preview

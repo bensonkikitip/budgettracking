@@ -9,7 +9,7 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   getBackupInfo, writeBackup, readBackupFromPath,
-  restoreFromData, BackupInfo, BACKUP_PATH,
+  restoreFromData, wipeAllData, BackupInfo, BACKUP_PATH,
 } from '../src/db/backup';
 import { Sloth } from '../src/components/Sloth';
 import { RacheyBanner } from '../src/components/RacheyBanner';
@@ -102,6 +102,46 @@ export default function BackupScreen() {
     }
   }
 
+  function handleWipe() {
+    Alert.alert(
+      'Erase all data?',
+      'This permanently deletes every account, transaction, category, rule, and budget. There is no undo.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, erase everything',
+          style: 'destructive',
+          onPress: () => {
+            // Second confirmation — this is irreversible
+            Alert.alert(
+              'Are you absolutely sure?',
+              'All your data will be gone. Export a backup first if you might want it later.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Erase',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setWorking(true);
+                    try {
+                      await wipeAllData();
+                      const refreshed = await getBackupInfo();
+                      setInfo(refreshed);
+                    } catch (e: any) {
+                      Alert.alert('Wipe failed', e.message ?? 'Unknown error');
+                    } finally {
+                      setWorking(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: 'Backup & Restore' }} />
@@ -186,6 +226,20 @@ export default function BackupScreen() {
             I back myself up automatically after every import or account change. iOS syncs the file to iCloud, so your data is safe when you restore or switch devices.
           </Text>
         </View>
+
+        {/* Danger zone */}
+        <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>DANGER ZONE</Text>
+        <TouchableOpacity
+          style={[styles.wipeButton, working && styles.buttonDisabled]}
+          onPress={handleWipe}
+          disabled={working}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.wipeButtonText}>Erase All Data…</Text>
+        </TouchableOpacity>
+        <Text style={styles.hint}>
+          Permanently deletes every account, transaction, category, and rule. Export a backup first if you might want your data later.
+        </Text>
       </ScrollView>
     </>
   );
@@ -277,5 +331,19 @@ const styles = StyleSheet.create({
     fontSize:   13,
     color:      colors.textSecondary,
     lineHeight: 20,
+  },
+
+  wipeButton: {
+    borderRadius:    radius.full,
+    paddingVertical: 16,
+    alignItems:      'center',
+    backgroundColor: 'transparent',
+    borderWidth:     2,
+    borderColor:     colors.destructive,
+  },
+  wipeButtonText: {
+    fontFamily: font.bold,
+    fontSize:   17,
+    color:      colors.destructive,
   },
 });

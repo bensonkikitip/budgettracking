@@ -168,3 +168,23 @@ export async function restoreFromData(data: BackupData): Promise<void> {
     }
   });
 }
+
+/**
+ * Permanently deletes every row from every table.
+ * Used by the "Wipe All Data" feature in the Backup screen.
+ * Runs inside a single transaction in FK-safe order (children before parents).
+ * Does NOT delete app_preferences — so the v4 welcome sheet won't re-appear
+ * if the user decides to start fresh.
+ */
+export async function wipeAllData(): Promise<void> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.execAsync('DELETE FROM foundational_rule_settings');
+    await db.execAsync('DELETE FROM transactions');
+    await db.execAsync('DELETE FROM import_batches');
+    await db.execAsync('DELETE FROM budgets');
+    await db.execAsync('DELETE FROM rules');
+    await db.execAsync('DELETE FROM categories');
+    await db.execAsync('DELETE FROM accounts');
+  });
+}
