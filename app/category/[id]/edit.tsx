@@ -6,6 +6,7 @@ import {
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { getAllCategories, updateCategory, deleteCategory } from '../../../src/db/queries';
 import { CATEGORY_COLORS } from '../../../src/domain/category-colors';
+import { CATEGORY_EMOJIS } from '../new';
 import { friendlyError } from '../../../src/domain/errors';
 import { colors, font, spacing, radius } from '../../../src/theme';
 
@@ -14,14 +15,21 @@ export default function EditCategoryScreen() {
   const router  = useRouter();
   const [name,          setName]          = useState('');
   const [selectedColor, setSelectedColor] = useState<string>(CATEGORY_COLORS[0].hex);
-  const [saving,        setSaving]        = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const [description,   setDescription]  = useState('');
+  const [saving,        setSaving]       = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
         const cats = await getAllCategories();
         const cat  = cats.find(c => c.id === id);
-        if (cat) { setName(cat.name); setSelectedColor(cat.color); }
+        if (cat) {
+          setName(cat.name);
+          setSelectedColor(cat.color);
+          setSelectedEmoji(cat.emoji ?? null);
+          setDescription(cat.description ?? '');
+        }
       } catch (e) {
         Alert.alert('Error', friendlyError(e));
       }
@@ -33,7 +41,12 @@ export default function EditCategoryScreen() {
     if (!trimmed) return;
     setSaving(true);
     try {
-      await updateCategory(id, { name: trimmed, color: selectedColor });
+      await updateCategory(id, {
+        name:        trimmed,
+        color:       selectedColor,
+        emoji:       selectedEmoji,
+        description: description.trim() || null,
+      });
       router.back();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Could not save.');
@@ -90,6 +103,43 @@ export default function EditCategoryScreen() {
           placeholderTextColor={colors.textTertiary}
         />
 
+        <Text style={[styles.label, { marginTop: spacing.lg }]}>Emoji (optional)</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.emojiScroll}
+          contentContainerStyle={styles.emojiRow}
+        >
+          <TouchableOpacity
+            style={[styles.emojiChip, selectedEmoji === null && styles.emojiChipSelected]}
+            onPress={() => setSelectedEmoji(null)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.emojiChipText, selectedEmoji === null && styles.emojiChipTextSelected]}>None</Text>
+          </TouchableOpacity>
+          {CATEGORY_EMOJIS.map(e => (
+            <TouchableOpacity
+              key={e}
+              style={[styles.emojiChip, selectedEmoji === e && styles.emojiChipSelected]}
+              onPress={() => setSelectedEmoji(e)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emojiGlyph}>{e}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <Text style={[styles.label, { marginTop: spacing.lg }]}>Description (optional)</Text>
+        <TextInput
+          style={[styles.input, styles.inputMultiline]}
+          placeholder="e.g. Restaurants, takeout, coffee"
+          placeholderTextColor={colors.textTertiary}
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={2}
+        />
+
         <Text style={[styles.label, { marginTop: spacing.lg }]}>Color</Text>
         <View style={styles.colorGrid}>
           {CATEGORY_COLORS.map(c => (
@@ -123,7 +173,7 @@ export default function EditCategoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content:   { padding: spacing.md },
+  content:   { padding: spacing.md, paddingBottom: spacing.xl },
   deleteBtn: { fontFamily: font.semiBold, fontSize: 15, color: colors.destructive, marginRight: 4 },
   label:     { fontFamily: font.semiBold, fontSize: 13, color: colors.textSecondary, marginBottom: spacing.sm, letterSpacing: 0.4 },
 
@@ -134,6 +184,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: 12,
     fontFamily: font.regular, fontSize: 16, color: colors.text,
   },
+  inputMultiline: { minHeight: 64, textAlignVertical: 'top' },
+
+  emojiScroll: { marginBottom: spacing.sm },
+  emojiRow:    { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },
+  emojiChip: {
+    paddingHorizontal: 10, paddingVertical: 7,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    minWidth: 44,
+  },
+  emojiChipSelected: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  emojiChipText:         { fontFamily: font.semiBold, fontSize: 12, color: colors.textSecondary },
+  emojiChipTextSelected: { color: colors.primary },
+  emojiGlyph:            { fontSize: 20 },
 
   colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   colorSwatch: {

@@ -11,6 +11,7 @@ import {
   getDistinctYears, getAccountSummaryForYear, getAllAccountsSummaryForYear,
   getDistinctCategoryIdsForMonth, getDistinctCategoryIdsForYear,
   getBudgetsForAllAccountsYearByAccount, getActualsByCategoryMonthAllAccountsByAccount,
+  getPreference,
 } from '../src/db/queries';
 import { buildMonthList, buildYearList, MonthEntry, YearEntry } from '../src/domain/month';
 import { monthsForPeriod } from '../src/domain/budget';
@@ -60,6 +61,9 @@ export default function AccountsListScreen() {
   const [allActualsRows, setAllActualsRows] = useState<ActualRowByAccount[]>([]);
 
   const [racheyMoment, setRacheyMoment] = useState<'firstAccount' | null>(null);
+
+  // ── v4 welcome check (fires once after first load) ────────────────────────
+  const welcomeChecked = useRef(false);
 
   // ── refs ──────────────────────────────────────────────────────────────────
   const selectedMonthRef   = useRef('');
@@ -231,6 +235,14 @@ export default function AccountsListScreen() {
       }
 
       if (active) setLoading(false);
+
+      // Show welcome-v4 sheet once for existing users upgrading from v3.x.
+      // "Existing user" = has at least one account + hasn't seen the sheet.
+      if (active && !welcomeChecked.current && accts.length > 0) {
+        welcomeChecked.current = true;
+        const welcomed = await getPreference('v4_welcomed');
+        if (!welcomed && active) router.push('/welcome-v4');
+      }
     })();
     return () => { active = false; };
   }, []));
