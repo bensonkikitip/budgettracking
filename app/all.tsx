@@ -184,6 +184,18 @@ export default function AllAccountsScreen() {
         'Create a rule?',
         `Want to automatically categorize future transactions containing "${tx.description}"?`,
         [
+          {
+            text: 'Undo',
+            onPress: async () => {
+              await setTransactionCategory(tx.id, null, false, null);
+              setTransactions(prev => prev.map(t =>
+                t.id === tx.id
+                  ? { ...t, category_id: null, category_set_manually: 0, applied_rule_id: null }
+                  : t,
+              ));
+              void writeBackup();
+            },
+          },
           { text: 'No thanks', style: 'cancel' },
           {
             text: 'Create Rule',
