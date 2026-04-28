@@ -21,6 +21,7 @@ import { TransactionRow } from '../../../src/components/TransactionRow';
 import { CategoryPickerSheet } from '../../../src/components/CategoryPickerSheet';
 import { Sloth } from '../../../src/components/Sloth';
 import { colors, font, spacing, radius, accountColor } from '../../../src/theme';
+import { centsToDollars } from '../../../src/domain/money';
 
 export default function AccountDetailScreen() {
   const { id }   = useLocalSearchParams<{ id: string }>();
@@ -42,6 +43,7 @@ export default function AccountDetailScreen() {
   const [selectedIds,           setSelectedIds]           = useState<Set<string>>(new Set());
   const [bulkPickerVisible,     setBulkPickerVisible]     = useState(false);
   const [searchText,            setSearchText]            = useState('');
+  const [breakdownOpen,         setBreakdownOpen]         = useState(false);
 
   const selectedMonthRef = useRef('');
   const selectedYearRef  = useRef('');
@@ -148,6 +150,23 @@ export default function AccountDetailScreen() {
     () => Object.fromEntries(categories.map(c => [c.id, c])),
     [categories],
   );
+
+  const categoryTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.dropped_at !== null) continue;
+      const key = t.category_id ?? '__none__';
+      map.set(key, (map.get(key) ?? 0) + t.amount_cents);
+    }
+    return Array.from(map.entries())
+      .filter(([, total]) => total !== 0)
+      .map(([key, total]) => {
+        if (key === '__none__') return { key, name: 'Uncategorized', color: null, total };
+        const cat = categoryMap[key];
+        return { key, name: cat?.name ?? 'Unknown', color: cat?.color ?? null, total };
+      })
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+  }, [transactions, categoryMap]);
 
   const allDisplayedSelected = displayedTransactions.length > 0 &&
     displayedTransactions.every(t => selectedIds.has(t.id));
@@ -320,6 +339,32 @@ export default function AccountDetailScreen() {
           </View>
         )}
 
+        {categoryTotals.length > 0 && (
+          <View style={styles.breakdown}>
+            <TouchableOpacity
+              style={styles.breakdownHeader}
+              onPress={() => setBreakdownOpen(o => !o)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.breakdownTitle}>By Category</Text>
+              <Text style={styles.breakdownChevron}>{breakdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {breakdownOpen && categoryTotals.map(row => (
+              <View key={row.key} style={styles.breakdownRow}>
+                {row.color
+                  ? <View style={[styles.breakdownDot, { backgroundColor: row.color }]} />
+                  : <View style={[styles.breakdownDot, styles.breakdownDotEmpty]} />
+                }
+                <Text style={styles.breakdownName} numberOfLines={1}>{row.name}</Text>
+                <Text style={[styles.breakdownAmount, { color: row.total >= 0 ? colors.income : colors.text }]}>
+                  {centsToDollars(row.total)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {transactions.length > 0 && (
           <View style={styles.searchBar}>
             <Text style={styles.searchIcon}>⌕</Text>
@@ -478,6 +523,54 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.separator,
   },
+  breakdown: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+    backgroundColor:   colors.surface,
+  },
+  breakdownHeader: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical:   11,
+  },
+  breakdownTitle: {
+    fontFamily: font.semiBold,
+    fontSize:   14,
+    color:      colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  breakdownChevron: {
+    fontSize: 10,
+    color:    colors.textTertiary,
+  },
+  breakdownRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical:   9,
+    borderTopWidth:    1,
+    borderTopColor:    colors.separator,
+    gap:               spacing.sm,
+  },
+  breakdownDot: {
+    width: 10, height: 10, borderRadius: radius.full, flexShrink: 0,
+  },
+  breakdownDotEmpty: {
+    borderWidth: 1, borderColor: colors.border,
+  },
+  breakdownName: {
+    fontFamily: font.regular,
+    fontSize:   14,
+    color:      colors.text,
+    flex:       1,
+  },
+  breakdownAmount: {
+    fontFamily: font.semiBold,
+    fontSize:   14,
+  },
+
   searchBar: {
     flexDirection:     'row',
     alignItems:        'center',
