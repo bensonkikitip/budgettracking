@@ -38,6 +38,8 @@ export async function getBackupInfo(): Promise<BackupInfo> {
   }
 }
 
+// IMPORTANT: writeBackup and restoreFromData must always handle the same set of tables.
+// If you add a table to one, add it to the other in the same edit.
 export async function writeBackup(): Promise<void> {
   try {
     const db = await getDb();

@@ -36,20 +36,21 @@ Run before every release. Pre-flight steps are non-negotiable.
 
 ### If you added a DB migration
 7. Confirm the migration is idempotent (`IF NOT EXISTS` / `try/catch` on `ALTER`) and `LATEST_DB_VERSION` was bumped.
-8. Bump `BackupData.version` in `src/db/backup.ts` if the change is non-additive (drops or renames a field).
-9. On a device with pre-migration data: open the app, confirm `slo-n-ready-backup.json` was written, confirm the changed screens load.
+8. In `src/db/backup.ts`, update **both** `writeBackup` (export) and `restoreFromData` (import) to handle the new table/column. They must always cover the same set of tables — if you touch one, touch the other.
+9. Bump `BackupData.version` in `src/db/backup.ts` if the change is non-additive (drops or renames a field).
+10. On a device with pre-migration data: open the app, confirm `slo-n-ready-backup.json` was written, confirm the changed screens load.
 
 ### Version & commit
-10. Pick the version bump (semver):
+11. Pick the version bump (semver):
     - **MAJOR** — incompatible UX rewrite or breaking schema change
     - **MINOR** — new user-visible feature
     - **PATCH** — bug fixes, copy, assets, additive schema with a clean migration
-11. Bump `version` in **both** `app.json` and `package.json` — they must stay in sync.
-12. Commit: `vX.Y.Z — <one-line summary>`.
+12. Bump `version` in **both** `app.json` and `package.json` — they must stay in sync.
+13. Commit: `vX.Y.Z — <one-line summary>`.
 
 ### Tag, push, release
-13. Tag and push: `git tag vX.Y.Z && git push origin main --tags`
-14. Create the GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z — …" --notes "…" --latest` — summarize features, fixes, and any DB migration in plain language. Tags alone don't show up in the Releases tab — always create the release too.
+14. Tag and push: `git tag vX.Y.Z && git push origin main --tags`
+15. Create the GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z — …" --notes "…" --latest` — summarize features, fixes, and any DB migration in plain language. Tags alone don't show up in the Releases tab — always create the release too.
 
 ## Critical conventions (don't violate without asking)
 
