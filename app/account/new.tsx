@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, Alert, ScrollView, ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Link } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -187,6 +187,10 @@ export default function AddAccountScreen() {
         I'll read the column headers and auto-detect which columns hold the date, description, and amount. You can fix anything that looks wrong below.
       </Text>
 
+      <Link href="/help/csv-guide" style={styles.csvGuideLink}>
+        How do I export a CSV from my bank? →
+      </Link>
+
       {/* ── Detected mapping form ── */}
       {config && (
         <>
@@ -314,6 +318,13 @@ const styles = StyleSheet.create({
     color:      colors.textTertiary,
     marginLeft: spacing.xs,
     lineHeight: 18,
+  },
+
+  csvGuideLink: {
+    fontFamily: font.semiBold,
+    fontSize:   13,
+    color:      colors.primary,
+    marginLeft: spacing.xs,
   },
 
   previewCard: {

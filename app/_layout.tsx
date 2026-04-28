@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Stack, ErrorBoundaryProps, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -10,6 +10,7 @@ import {
   Nunito_800ExtraBold,
 } from '@expo-google-fonts/nunito';
 import { colors, font, spacing, radius } from '../src/theme';
+import { SplashSlogan } from '../src/components/SplashSlogan';
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const router = useRouter();
@@ -46,12 +47,13 @@ const eb = StyleSheet.create({
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded]  = useFonts({
     Nunito_400Regular,
     Nunito_600SemiBold,
     Nunito_700Bold,
     Nunito_800ExtraBold,
   });
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync();
@@ -60,14 +62,17 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle:      { backgroundColor: colors.background },
-        headerTintColor:  colors.primary,
-        headerTitleStyle: { fontFamily: font.bold, color: colors.text, fontSize: 17 },
-        headerShadowVisible: false,
-        contentStyle:     { backgroundColor: colors.background },
-      }}
-    />
+    <>
+      <Stack
+        screenOptions={{
+          headerStyle:         { backgroundColor: colors.background },
+          headerTintColor:     colors.primary,
+          headerTitleStyle:    { fontFamily: font.bold, color: colors.text, fontSize: 17 },
+          headerShadowVisible: false,
+          contentStyle:        { backgroundColor: colors.background },
+        }}
+      />
+      {showSplash && <SplashSlogan onDone={() => setShowSplash(false)} />}
+    </>
   );
 }

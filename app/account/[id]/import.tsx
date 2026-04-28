@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ScrollView, ActivityIndicator,
+  Alert, ScrollView, ActivityIndicator, Linking,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack, Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -14,7 +14,7 @@ import {
   getDistinctMonths,
 } from '../../../src/db/queries';
 import { writeBackupSafe } from '../../../src/db/backup';
-import { autoApplyRulesForAccount } from '../../../src/domain/rules-engine';
+import { autoApplyRulesForAccount, ApplyResult } from '../../../src/domain/rules-engine';
 import { parseCsv, ParsedRow } from '../../../src/parsers';
 import { assignTransactionIds } from '../../../src/domain/transaction-id';
 import { centsToDollars } from '../../../src/domain/money';
@@ -33,9 +33,11 @@ export default function ImportScreen() {
   const [phase,        setPhase]        = useState<Phase>('pick');
   const [preview,      setPreview]      = useState<PreviewData | null>(null);
   const [result,       setResult]       = useState<ImportResult | null>(null);
+  const [applyResult,  setApplyResult]  = useState<ApplyResult | null>(null);
   const [loading,      setLoading]      = useState(false);
   const [account,      setAccount]      = useState<Account | null>(null);
   const [racheyMoment, setRacheyMoment] = useState<'firstImport' | 'recurringImport' | null>(null);
+  const [cachedUri,    setCachedUri]    = useState<string | null>(null);
 
   React.useEffect(() => {
     getAllAccounts().then(accts => setAccount(accts.find(a => a.id === accountId) ?? null));
@@ -57,6 +59,7 @@ export default function ImportScreen() {
       const text = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.UTF8,
       });
+      setCachedUri(asset.uri);
       if (!account) throw new Error('Account not found');
 
       const rows = parseCsv(parseColumnConfig(account), text);
@@ -115,11 +118,19 @@ export default function ImportScreen() {
         rows_dropped:           importResult.dropped,
       });
 
-      // Auto-apply this account's rules to any newly uncategorized transactions
-      await autoApplyRulesForAccount(accountId);
+      // Auto-apply this account's rules (user rules first, then foundational)
+      const applied = await autoApplyRulesForAccount(accountId);
 
       writeBackupSafe();
+
+      // Delete the cached copy of the CSV — the app never needs it again.
+      // The user's original file in Downloads is untouched (iOS won't let us delete it).
+      if (cachedUri) {
+        try { await FileSystem.deleteAsync(cachedUri, { idempotent: true }); } catch {}
+      }
+
       setResult(importResult);
+      setApplyResult(applied);
       setRacheyMoment(isFirstImport ? 'firstImport' : 'recurringImport');
       setPhase('done');
     } catch (e: any) {
@@ -152,6 +163,9 @@ export default function ImportScreen() {
             <Text style={styles.pickBody}>
               Hand me a CSV from your bank and I'll show you a preview before saving anything.
             </Text>
+            <Link href="/help/csv-guide" style={styles.csvGuideLink}>
+              How do I export a CSV from my bank? →
+            </Link>
             {loading
               ? <ActivityIndicator color={accent} style={{ marginTop: spacing.lg }} />
               : (
@@ -235,6 +249,19 @@ export default function ImportScreen() {
               <RacheyBanner moment={racheyMoment} onDismiss={() => setRacheyMoment(null)} />
             )}
 
+            {/* Categorized-for-you highlight (shown when any rule fired) */}
+            {applyResult && applyResult.total > 0 && (
+              <View style={styles.categorizedCard}>
+                <Text style={styles.categorizedEmoji}>🎉</Text>
+                <Text style={styles.categorizedTitle}>
+                  {applyResult.total} of {result.inserted + result.cleared} transaction{(result.inserted + result.cleared) !== 1 ? 's' : ''} categorized for you!
+                </Text>
+                <Text style={styles.categorizedBody}>
+                  I sorted what I recognized. The rest are waiting — tap any to assign a category, or just leave them. No rush.
+                </Text>
+              </View>
+            )}
+
             <View style={styles.statsCard}>
               <StatRow label="Added"                   value={String(result.inserted)} />
               {result.cleared > 0 && (
@@ -245,6 +272,20 @@ export default function ImportScreen() {
               )}
               <StatRow label="Skipped (duplicates)"  value={String(result.skipped)} />
               <StatRow label="Total in file"          value={String(result.total)} last />
+            </View>
+
+            {/* Nudge to delete original CSV from Downloads */}
+            <View style={styles.nudgeCard}>
+              <Text style={styles.nudgeText}>
+                I've deleted my copy of the file. You may want to delete the original from your Downloads folder too — I never need it again.
+              </Text>
+              <TouchableOpacity
+                style={styles.nudgeButton}
+                onPress={() => Linking.openURL('shareddocuments://')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.nudgeButtonText}>Open Files App</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -284,6 +325,9 @@ const styles = StyleSheet.create({
     fontFamily: font.regular, fontSize: 15, color: colors.textSecondary,
     textAlign: 'center', lineHeight: 22,
   },
+  csvGuideLink: {
+    fontFamily: font.semiBold, fontSize: 13, color: colors.primary,
+  },
 
   // Preview
   previewContainer: { gap: spacing.md },
@@ -312,6 +356,41 @@ const styles = StyleSheet.create({
   // Done
   doneContainer: { alignItems: 'center', paddingTop: spacing.xl, gap: spacing.md },
   doneTitle:     { fontFamily: font.extraBold, fontSize: 26, color: colors.text },
+
+  categorizedCard: {
+    width: '100%', backgroundColor: colors.primaryLight,
+    borderRadius: radius.lg, padding: spacing.md,
+    borderWidth: 1, borderColor: colors.primary,
+    alignItems: 'center', gap: 6,
+  },
+  categorizedEmoji: { fontSize: 28 },
+  categorizedTitle: {
+    fontFamily: font.bold, fontSize: 17, color: colors.primary,
+    textAlign: 'center',
+  },
+  categorizedBody: {
+    fontFamily: font.regular, fontSize: 14, color: colors.textSecondary,
+    textAlign: 'center', lineHeight: 20,
+  },
+
+  nudgeCard: {
+    width: '100%', backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.lg, padding: spacing.md,
+    borderWidth: 1, borderColor: colors.border,
+    gap: spacing.sm,
+  },
+  nudgeText: {
+    fontFamily: font.regular, fontSize: 13, color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  nudgeButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 7, paddingHorizontal: spacing.md,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  nudgeButtonText: { fontFamily: font.semiBold, fontSize: 13, color: colors.textSecondary },
   statsCard: {
     width: '100%', backgroundColor: colors.surface,
     borderRadius: radius.lg, overflow: 'hidden',

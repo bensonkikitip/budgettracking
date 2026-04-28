@@ -67,7 +67,15 @@ export default function CategoriesScreen() {
               activeOpacity={0.7}
             >
               <View style={[styles.swatch, { backgroundColor: item.color }]} />
-              <Text style={styles.rowName}>{item.name}</Text>
+              {item.emoji ? (
+                <Text style={styles.rowEmoji}>{item.emoji}</Text>
+              ) : null}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowName}>{item.name}</Text>
+                {item.description ? (
+                  <Text style={styles.rowDesc} numberOfLines={1}>{item.description}</Text>
+                ) : null}
+              </View>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
           )}
@@ -98,8 +106,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.separator },
-  swatch:    { width: 14, height: 14, borderRadius: radius.full, marginRight: spacing.md },
-  rowName:   { fontFamily: font.semiBold, fontSize: 16, color: colors.text, flex: 1 },
+  swatch:    { width: 14, height: 14, borderRadius: radius.full, marginRight: spacing.sm },
+  rowEmoji:  { fontSize: 18, marginRight: spacing.sm },
+  rowName:   { fontFamily: font.semiBold, fontSize: 16, color: colors.text },
+  rowDesc:   { fontFamily: font.regular, fontSize: 12, color: colors.textTertiary, marginTop: 1 },
   chevron:   { fontSize: 22, color: colors.textTertiary },
 
   emptyState: {
