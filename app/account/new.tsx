@@ -49,6 +49,7 @@ export default function AddAccountScreen() {
         type,
         csv_format:    csvFormat,
         column_config: JSON.stringify(DEFAULT_CONFIGS[csvFormat]),
+        suggest_rules: 1,
         created_at:    Date.now(),
       });
       void writeBackup();

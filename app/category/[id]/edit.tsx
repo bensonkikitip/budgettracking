@@ -12,7 +12,7 @@ export default function EditCategoryScreen() {
   const { id }  = useLocalSearchParams<{ id: string }>();
   const router  = useRouter();
   const [name,          setName]          = useState('');
-  const [selectedColor, setSelectedColor] = useState(CATEGORY_COLORS[0].hex);
+  const [selectedColor, setSelectedColor] = useState<string>(CATEGORY_COLORS[0].hex);
   const [saving,        setSaving]        = useState(false);
 
   useEffect(() => {

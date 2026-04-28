@@ -12,6 +12,8 @@ function matchesCondition(
 ): boolean {
   const lower = (tx.description ?? '').toLowerCase();
   const pattern = cond.match_text.toLowerCase();
+  // Guard: empty pattern would match every transaction via .includes("") etc.
+  if (!pattern && ['contains', 'starts_with', 'ends_with', 'equals'].includes(cond.match_type)) return false;
   const cents = parseInt(cond.match_text, 10);
   switch (cond.match_type) {
     case 'contains':    return lower.includes(pattern);

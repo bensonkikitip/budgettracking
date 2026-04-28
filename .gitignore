@@ -44,5 +44,7 @@ yarn-error.*
 local-data/
 *.csv
 *.db
+# Local backup file (on-device data snapshot, not version-controlled)
+slo-n-ready-backup.json
 # Exception: synthetic test fixtures are safe to commit (no real financial data)
 !tests/fixtures/*.csv

@@ -12,7 +12,7 @@ import * as Crypto from 'expo-crypto';
 export default function NewCategoryScreen() {
   const router = useRouter();
   const [name,          setName]          = useState('');
-  const [selectedColor, setSelectedColor] = useState(CATEGORY_COLORS[0].hex);
+  const [selectedColor, setSelectedColor] = useState<string>(CATEGORY_COLORS[0].hex);
   const [saving,        setSaving]        = useState(false);
 
   async function handleSave() {

@@ -22,7 +22,7 @@ export function CategoryPickerSheet({
 }: Props) {
   const [phase,      setPhase]      = useState<'list' | 'create'>('list');
   const [newName,    setNewName]    = useState('');
-  const [newColor,   setNewColor]   = useState(CATEGORY_COLORS[0].hex);
+  const [newColor,   setNewColor]   = useState<string>(CATEGORY_COLORS[0].hex);
   const [creating,   setCreating]   = useState(false);
   const [searchText, setSearchText] = useState('');
 

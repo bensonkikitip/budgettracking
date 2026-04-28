@@ -90,7 +90,7 @@ export default function AccountRulesScreen() {
   // Inline category picker (inside the sheet ScrollView — no second modal)
   const [catView,     setCatView]     = useState<CatView>('collapsed');
   const [newCatName,  setNewCatName]  = useState('');
-  const [newCatColor, setNewCatColor] = useState(CATEGORY_COLORS[0].hex);
+  const [newCatColor, setNewCatColor] = useState<string>(CATEGORY_COLORS[0].hex);
   const [creatingCat, setCreatingCat] = useState(false);
 
   useFocusEffect(useCallback(() => {

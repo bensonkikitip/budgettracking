@@ -5,6 +5,8 @@ function makeRule(overrides: Partial<Rule> & Pick<Rule, 'match_type' | 'match_te
   return {
     id: 'rule-1',
     account_id: 'acct-1',
+    logic: 'AND',
+    conditions: [],
     priority: 1,
     created_at: 0,
     ...overrides,
@@ -12,7 +14,7 @@ function makeRule(overrides: Partial<Rule> & Pick<Rule, 'match_type' | 'match_te
 }
 
 function makeTx(id: string, description: string, manually = 0) {
-  return { id, description, category_set_manually: manually };
+  return { id, description, amount_cents: 0, category_set_manually: manually };
 }
 
 describe('applyRulesToTransactions', () => {
@@ -201,7 +203,7 @@ describe('applyRulesToTransactions', () => {
     it('handles null/undefined description without throwing', () => {
       const rule = makeRule({ match_type: 'contains', match_text: 'amazon', category_id: 'cat-amazon' });
       // description may be null if imported from a malformed CSV row
-      const txWithNullDesc = { id: 'tx-1', description: null as unknown as string, category_set_manually: 0 };
+      const txWithNullDesc = { id: 'tx-1', description: null as unknown as string, amount_cents: 0, category_set_manually: 0 };
       expect(() => applyRulesToTransactions([txWithNullDesc], [rule])).not.toThrow();
       expect(applyRulesToTransactions([txWithNullDesc], [rule])).toHaveLength(0);
     });

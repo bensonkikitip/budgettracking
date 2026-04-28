@@ -1,0 +1,251 @@
+# Database Schema
+
+> Source of truth: [`src/db/client.ts`](../src/db/client.ts) (DDL + migrations), [`src/db/queries.ts`](../src/db/queries.ts) (TypeScript types + queries), [`src/db/backup.ts`](../src/db/backup.ts) (export/restore format).
+>
+> Update this file in the same commit as any schema change. The ship checklist in [CLAUDE.md](../CLAUDE.md) requires it.
+
+**Database**: local SQLite file `budgetapp.db`, opened via `expo-sqlite`.
+**Foreign keys**: enabled (`PRAGMA foreign_keys = ON`). Cascading deletes are intentional.
+**Schema version**: tracked via `PRAGMA user_version`. Current = **9**.
+
+---
+
+## Conventions
+
+| Concept | Storage | Notes |
+|---|---|---|
+| Money | `INTEGER` (cents, signed) | Negative = expense/debit, positive = income/credit. Never floats. |
+| Dates | `TEXT` ISO `YYYY-MM-DD` | Lex order = chronological, so `ORDER BY date` works. |
+| Months | `TEXT` `YYYY-MM` | Used as a column on `budgets`. Derived elsewhere via `substr(date, 1, 7)`. |
+| Years | derived | `substr(date, 1, 4)`. |
+| Timestamps | `INTEGER` ms since epoch | `created_at`, `imported_at`, `dropped_at`. |
+| Booleans | `INTEGER` 0 or 1 | `is_pending`, `category_set_manually`, `suggest_rules`. |
+| IDs | `TEXT` | Account/category/rule IDs are random; transaction IDs are deterministic SHA256 (see [ARCHITECTURE.md](ARCHITECTURE.md#csv-import--transaction-ids)). |
+| JSON blobs | `TEXT` | `accounts.column_config`, `rules.conditions`. Parse defensively. |
+
+---
+
+## Tables
+
+### `accounts`
+A user's bank account (checking or credit card).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY` | Random ID. |
+| `name` | `TEXT NOT NULL` | User-facing label. |
+| `type` | `TEXT NOT NULL` | `CHECK IN ('checking', 'credit_card')`. |
+| `csv_format` | `TEXT NOT NULL` | `'boa_checking_v1'` \| `'citi_cc_v1'`. Determines default `column_config`. |
+| `column_config` | `TEXT` | JSON `ColumnConfig` (see below). Nullable for v1 accounts; backfilled in migration v3. |
+| `created_at` | `INTEGER NOT NULL` | ms timestamp. |
+| `suggest_rules` | `INTEGER NOT NULL DEFAULT 1` | 1 = show rule-suggestion banner after manual categorization; 0 = show plain undo banner. |
+
+**Cascade**: deleting an account deletes its `import_batches`, `transactions`, `rules`, and `budgets`.
+
+---
+
+### `import_batches`
+Metadata about one CSV import.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY` | |
+| `account_id` | `TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE` | |
+| `filename` | `TEXT` | Source filename if known. |
+| `imported_at` | `INTEGER NOT NULL` | ms timestamp. |
+| `rows_total` | `INTEGER NOT NULL` | Rows parsed from CSV. |
+| `rows_inserted` | `INTEGER NOT NULL` | New transactions added. |
+| `rows_skipped_duplicate` | `INTEGER NOT NULL` | Exact ID matches already in DB. |
+| `rows_cleared` | `INTEGER NOT NULL DEFAULT 0` | Pending → cleared updates. |
+| `rows_dropped` | `INTEGER NOT NULL DEFAULT 0` | Pendings that disappeared from the bank's feed. |
+
+---
+
+### `transactions`
+Individual transactions imported from CSVs.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY` | Deterministic SHA256 (see [ARCHITECTURE.md](ARCHITECTURE.md#csv-import--transaction-ids)). |
+| `account_id` | `TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE` | |
+| `date` | `TEXT NOT NULL` | `YYYY-MM-DD`. |
+| `amount_cents` | `INTEGER NOT NULL` | Signed. |
+| `description` | `TEXT NOT NULL` | Normalized via `normalizeDescription()`. |
+| `original_description` | `TEXT NOT NULL` | Verbatim from CSV. |
+| `is_pending` | `INTEGER NOT NULL DEFAULT 0` | 1 = still pending in bank feed. |
+| `dropped_at` | `INTEGER DEFAULT NULL` | Set when a pending transaction disappeared from a later import. **Filtered out of all summaries** (`dropped_at IS NULL` clause). |
+| `import_batch_id` | `TEXT NOT NULL REFERENCES import_batches(id)` | Which import created this row. |
+| `created_at` | `INTEGER NOT NULL` | ms timestamp. |
+| `category_id` | `TEXT REFERENCES categories(id) ON DELETE SET NULL` | Nullable. |
+| `category_set_manually` | `INTEGER NOT NULL DEFAULT 0` | 1 = user picked it; 0 = rule applied (or none). Manual rows are skipped by rule auto-apply. |
+| `applied_rule_id` | `TEXT REFERENCES rules(id) ON DELETE SET NULL` | Which rule categorized this row (null if manual or uncategorized). |
+
+**Indexes**:
+- `idx_tx_account_date` on `(account_id, date DESC)`
+- `idx_tx_date` on `(date DESC)`
+
+---
+
+### `categories`
+User-defined spend/income categories.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY` | |
+| `name` | `TEXT NOT NULL` | |
+| `color` | `TEXT NOT NULL` | Hex like `#6FA882`. Picked from the 8-swatch palette in `src/domain/category-colors.ts`. |
+| `created_at` | `INTEGER NOT NULL` | |
+
+Deleting a category sets `transactions.category_id` and any rule references to NULL — but rules cascade-delete via the `rules.category_id` FK (see below), so rules are wiped when their category is deleted.
+
+---
+
+### `rules`
+Auto-categorization rules. One rule maps matching transactions on one account to one category.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY` | |
+| `account_id` | `TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE` | |
+| `category_id` | `TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE` | |
+| `match_type` | `TEXT NOT NULL` | `CHECK IN ('contains', 'starts_with', 'ends_with', 'equals', 'amount_eq', 'amount_lt', 'amount_gt')`. **Legacy** — mirrors `conditions[0]`. |
+| `match_text` | `TEXT NOT NULL` | **Legacy** — mirrors `conditions[0]`. |
+| `logic` | `TEXT NOT NULL DEFAULT 'AND'` | `'AND'` \| `'OR'` for multi-condition rules. |
+| `conditions` | `TEXT NOT NULL DEFAULT '[]'` | JSON array of `{ match_type, match_text }`. The authoritative match data. |
+| `priority` | `INTEGER NOT NULL DEFAULT 100` | Lower = evaluated first. Reorderable via UI. |
+| `created_at` | `INTEGER NOT NULL` | |
+
+**Index**: `idx_rules_account_priority` on `(account_id, priority ASC)`.
+
+**Note**: `match_type` and `match_text` columns still exist for backward compat but are not the source of truth. Read/write via `conditions`. `insertRule` and `updateRule` keep `conditions[0]` mirrored into them automatically.
+
+---
+
+### `budgets`
+Monthly budget allocation per account+category.
+
+| Column | Type | Notes |
+|---|---|---|
+| `account_id` | `TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE` | |
+| `category_id` | `TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE` | |
+| `month` | `TEXT NOT NULL` | `YYYY-MM`. |
+| `amount_cents` | `INTEGER NOT NULL` | Signed (negative = expense budget). |
+
+**Primary key**: `(account_id, category_id, month)` — composite. There is no surrogate `id`.
+**Index**: `idx_budgets_account_month` on `(account_id, month)`.
+**Zero is absence**: `setBudget(..., 0)` deletes the row rather than storing `0`. The grid renders `null` and `0` the same way (empty cell).
+
+---
+
+## TypeScript interfaces
+
+Defined in [`src/db/queries.ts`](../src/db/queries.ts) (and `Budget` near the bottom). When you change a column, change the interface in the same edit.
+
+```ts
+type AccountType = 'checking' | 'credit_card';
+type CsvFormat   = 'boa_checking_v1' | 'citi_cc_v1';
+type MatchType   = 'contains' | 'starts_with' | 'ends_with' | 'equals'
+                 | 'amount_eq' | 'amount_lt' | 'amount_gt';
+
+interface Account       { id; name; type: AccountType; csv_format: CsvFormat;
+                          column_config: string /*JSON*/; created_at: number;
+                          suggest_rules: number; }
+interface ImportBatch   { id; account_id; filename: string|null; imported_at: number;
+                          rows_total; rows_inserted; rows_skipped_duplicate;
+                          rows_cleared; rows_dropped; }
+interface Transaction   { id; account_id; date: string /*YYYY-MM-DD*/;
+                          amount_cents: number; description; original_description;
+                          is_pending: number; dropped_at: number|null;
+                          import_batch_id; created_at: number;
+                          category_id: string|null; category_set_manually: number;
+                          applied_rule_id: string|null; }
+interface Category      { id; name; color: string /*#hex*/; created_at: number; }
+interface RuleCondition { match_type: MatchType; match_text: string; }
+interface Rule          { id; account_id; category_id;
+                          match_type; match_text;            // legacy mirror of conditions[0]
+                          logic: 'AND'|'OR';
+                          conditions: RuleCondition[];        // authoritative
+                          priority: number; created_at: number; }
+interface Budget        { account_id; category_id; month: string /*YYYY-MM*/;
+                          amount_cents: number; }
+interface AccountSummary{ income_cents; expense_cents; net_cents;
+                          transaction_count; last_imported_at: number|null; }
+```
+
+`ColumnConfig` (in [`src/parsers/column-config.ts`](../src/parsers/column-config.ts)):
+
+```ts
+interface ColumnConfig {
+  dateColumn: string;
+  descriptionColumn: string;
+  dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
+  amountStyle: 'signed' | 'debit_credit';
+  signedAmountColumn?: string;     // when amountStyle = 'signed'
+  headerContains?: string;         // skip CSV preamble until this header line is found
+  debitColumn?: string;            // when amountStyle = 'debit_credit'
+  creditColumn?: string;
+  pendingColumn?: string;          // optional: column whose value indicates pending status
+  clearedValue?: string;           // value in pendingColumn that means "cleared" (anything else = pending)
+}
+```
+
+---
+
+## Migration history
+
+All migrations live in [`src/db/client.ts`](../src/db/client.ts) under `getDb()`. They run in order; each is idempotent (guarded with `try/catch` or `IF NOT EXISTS`). **Never edit a past migration** — add a new one and bump `LATEST_DB_VERSION`.
+
+| Version | What changed |
+|---|---|
+| 1 | Base schema: `accounts`, `import_batches`, `transactions` + tx indexes. |
+| 2 | `transactions.dropped_at`, `import_batches.rows_cleared`, `import_batches.rows_dropped`. |
+| 3 | `accounts.column_config` (nullable). Backfills BoA + Citi defaults for legacy rows. |
+| 4 | One-time orphan cleanup — deletes `transactions` and `import_batches` whose `account_id` no longer exists (legacy bug from before FKs were enabled). |
+| 5 | Adds `categories` and `rules` tables. Adds `transactions.category_id`, `category_set_manually`, `applied_rule_id`. Indexes rules by `(account_id, priority)`. |
+| 6 | Expands `rules.match_type` CHECK to include `amount_eq`/`amount_lt`/`amount_gt`. Recreates the table (SQLite can't `ALTER` a CHECK). Safe to retry if interrupted (drops leftover `rules_new`). |
+| 7 | Multi-condition rules: adds `rules.logic` (`'AND'` default) and `rules.conditions` (JSON, `'[]'` default). Backfills existing single-condition rules into `conditions`. |
+| 8 | `accounts.suggest_rules` (default 1). |
+| 9 | Adds `budgets` table + `idx_budgets_account_month` index. |
+
+**Pre-migration backup**: before any pending migration runs, [`writePreMigrationBackup`](../src/db/client.ts) writes a snapshot of all known tables to `Documents/slo-n-ready-backup.json` so the user can roll back if a migration fails. Don't bypass this.
+
+---
+
+## Backup file format
+
+File path: `Documents/slo-n-ready-backup.json` (constant `BACKUP_PATH` in [`src/db/backup.ts`](../src/db/backup.ts)).
+
+Backups are written automatically after CSV imports, account changes, and on demand via the Backup screen. They include every row of every table.
+
+```ts
+interface BackupData {
+  version:        number;       // 1, 2, or 3 — see compatibility below
+  exported_at:    number;       // ms timestamp
+  accounts:       Account[];
+  import_batches: ImportBatch[];
+  transactions:   Transaction[];
+  categories:     Category[];   // present from v2
+  rules:          Rule[];       // present from v2
+  budgets:        Budget[];     // present from v3
+}
+```
+
+**Compatibility** (`readBackupFromPath` accepts v1, v2, v3):
+- v1: pre-categories. `categories`/`rules`/`budgets` may be missing.
+- v2: includes categories + rules.
+- v3: adds `budgets`. **Current.**
+
+`restoreFromData` deletes all rows in FK-safe order (children before parents), then re-inserts everything inside one transaction. Missing fields are backfilled with safe defaults (`suggest_rules ?? 1`, `dropped_at ?? null`, `conditions ?? '[]'`, etc.).
+
+**When to bump `BackupData.version`**: any time you add a new table to the backup or change the shape of an existing field in a non-additive way. Bump in `writeBackup` (write the new version) and add the new version to the accept-list in `readBackupFromPath`.
+
+---
+
+## When you change the schema
+
+1. Add a new `if (version < N)` block in `src/db/client.ts` and bump `LATEST_DB_VERSION` to `N`. Keep statements idempotent (`IF NOT EXISTS`, `try/catch` around `ALTER`).
+2. Update the relevant TypeScript interface in `src/db/queries.ts`.
+3. Update [`writeBackup`](../src/db/backup.ts) to include the new column/table in the export, and [`restoreFromData`](../src/db/backup.ts) to import it (with a safe default for older backups).
+4. Bump `BackupData.version` if the change is non-additive or adds a new table.
+5. **Update this file** — the migration table, the table reference, and the TypeScript snippet.
+6. Add a query test if the change has non-trivial logic (e.g. a new `WHERE` clause, a new aggregate).

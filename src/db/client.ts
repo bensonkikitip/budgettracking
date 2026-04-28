@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 
-const LATEST_DB_VERSION = 8;
+const LATEST_DB_VERSION = 9;
 
 // Written before any migration runs so the user can always roll back.
 // Uses the same path and format as writeBackup() in backup.ts.
@@ -229,6 +229,24 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (version < 8) {
     try { await db.execAsync(`ALTER TABLE accounts ADD COLUMN suggest_rules INTEGER NOT NULL DEFAULT 1`); } catch {}
     await db.execAsync('PRAGMA user_version = 8');
+  }
+
+  if (version < 9) {
+    try {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS budgets (
+          account_id   TEXT NOT NULL REFERENCES accounts(id)   ON DELETE CASCADE,
+          category_id  TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+          month        TEXT NOT NULL,
+          amount_cents INTEGER NOT NULL,
+          PRIMARY KEY (account_id, category_id, month)
+        )
+      `);
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_budgets_account_month ON budgets (account_id, month)
+      `);
+    } catch {}
+    await db.execAsync('PRAGMA user_version = 9');
   }
 
   _db = db;

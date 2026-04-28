@@ -3,7 +3,7 @@
     "name": "Slo N Ready",
     "slug": "slo-n-ready",
     "scheme": "slonready",
-    "version": "2.9.2",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
