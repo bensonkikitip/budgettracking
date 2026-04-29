@@ -1,57 +1,48 @@
 import React from 'react';
-import { View, Image } from 'react-native';
+import { Image, ImageStyle, StyleProp } from 'react-native';
 
-// Sprite sheet dimensions (1275 × 1234, 4×4 grid)
-const IMG_W = 1275;
-const IMG_H = 1234;
-const CELL_W = IMG_W / 4; // 318.75
-const CELL_H = IMG_H / 4; // 308.5
-
-const SHEET = require('../../assets/sloth-sheet.png');
-
-// Named positions — row/col within the 4×4 grid (0-indexed)
-export const SLOTHS = {
-  mug:         { row: 0, col: 0 }, // holding a coffee mug — cozy
-  laptop:      { row: 0, col: 1 }, // on a laptop — no accounts yet
-  piggyBank:   { row: 0, col: 2 }, // with piggy bank — home/savings
-  waving:      { row: 0, col: 3 }, // waving + sparkles — celebration
-  writing:     { row: 1, col: 0 }, // writing — notes
-  receipt:     { row: 1, col: 1 }, // holding receipt — no transactions
-  phoneDollar: { row: 1, col: 2 }, // phone with $ — import
-  meditating:  { row: 1, col: 3 }, // meditating — all accounts
-  dreaming:    { row: 2, col: 0 }, // daydreaming ♡ — onboarding
-  books:       { row: 2, col: 1 }, // stacked books — learning
-  watering:    { row: 2, col: 2 }, // watering plant — growth
-  budgetGoals: { row: 2, col: 3 }, // BUDGET GOALS sign — goals
-  box:         { row: 3, col: 0 }, // in a box — empty / unknown
-  coin:        { row: 3, col: 1 }, // gold coin — income
-  sleeping:    { row: 3, col: 2 }, // sleeping zzz — loading
-  thumbsUp:    { row: 3, col: 3 }, // thumbs up ♡ — success / done
+// Individual transparent PNGs — one per pose.
+// Each file was extracted from the original sprite sheet with the white
+// background stripped so Rachey renders free-standing on any background.
+const SOURCES = {
+  mug:         require('../../assets/sloth/mug.png'),
+  laptop:      require('../../assets/sloth/laptop.png'),
+  piggyBank:   require('../../assets/sloth/piggyBank.png'),
+  waving:      require('../../assets/sloth/waving.png'),
+  writing:     require('../../assets/sloth/writing.png'),
+  receipt:     require('../../assets/sloth/receipt.png'),
+  phoneDollar: require('../../assets/sloth/phoneDollar.png'),
+  meditating:  require('../../assets/sloth/meditating.png'),
+  dreaming:    require('../../assets/sloth/dreaming.png'),
+  books:       require('../../assets/sloth/books.png'),
+  watering:    require('../../assets/sloth/watering.png'),
+  budgetGoals: require('../../assets/sloth/budgetGoals.png'),
+  box:         require('../../assets/sloth/box.png'),
+  coin:        require('../../assets/sloth/coin.png'),
+  sleeping:    require('../../assets/sloth/sleeping.png'),
+  thumbsUp:    require('../../assets/sloth/thumbsUp.png'),
 } as const;
 
-export type SlothKey = keyof typeof SLOTHS;
+export type SlothKey = keyof typeof SOURCES;
+
+// Re-export SLOTHS for any code that imported it from the old sprite-sheet
+// implementation — it now just maps each key to itself.
+export const SLOTHS = Object.fromEntries(
+  Object.keys(SOURCES).map(k => [k, k])
+) as Record<SlothKey, SlothKey>;
 
 interface Props {
   sloth: SlothKey;
   size?: number;
+  style?: StyleProp<ImageStyle>;
 }
 
-export function Sloth({ sloth, size = 120 }: Props) {
-  const { row, col } = SLOTHS[sloth];
-  const scale = size / CELL_W;
-  const scaledH = CELL_H * scale; // keeps aspect ratio correct per cell
-
+export function Sloth({ sloth, size = 120, style }: Props) {
   return (
-    <View style={{ width: size, height: scaledH, overflow: 'hidden' }}>
-      <Image
-        source={SHEET}
-        style={{
-          width:  IMG_W * scale,
-          height: IMG_H * scale,
-          marginLeft: -(col * CELL_W * scale),
-          marginTop:  -(row * CELL_H * scale),
-        }}
-      />
-    </View>
+    <Image
+      source={SOURCES[sloth]}
+      style={[{ width: size, height: size }, style]}
+      resizeMode="contain"
+    />
   );
 }
