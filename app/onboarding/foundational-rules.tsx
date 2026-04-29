@@ -59,6 +59,7 @@ export default function OnboardingFoundationalRulesScreen() {
 
       // Try to seed from oldest OTHER account first (n+1 case)
       let seedFromOlder: Map<string, string | null> | null = null;
+      let seedSortOrder: Map<string, number> | null = null;
       const otherAccts = allAccts
         .filter(a => a.id !== accountId)
         .sort((a, b) => a.created_at - b.created_at);
@@ -66,6 +67,7 @@ export default function OnboardingFoundationalRulesScreen() {
         const prior = await getFoundationalRuleSettingsForAccount(otherAccts[0].id);
         if (prior.length > 0) {
           seedFromOlder = new Map(prior.map(p => [p.rule_id, p.category_id]));
+          seedSortOrder = new Map(prior.map(p => [p.rule_id, p.sort_order]));
         }
       }
 
@@ -82,6 +84,17 @@ export default function OnboardingFoundationalRulesScreen() {
         }
         return { ruleId: fr.id, categoryId: catId, enabled: catId !== null };
       });
+
+      // Sort to match the seeded account's order (n+1 case), or keep the default
+      // FOUNDATIONAL_RULES order for the first account (already globally optimal).
+      if (seedSortOrder) {
+        const defaultPos = new Map(FOUNDATIONAL_RULES.map((fr, i) => [fr.id, i]));
+        initialRows.sort((a, b) => {
+          const aPos = seedSortOrder!.get(a.ruleId) ?? defaultPos.get(a.ruleId) ?? 0;
+          const bPos = seedSortOrder!.get(b.ruleId) ?? defaultPos.get(b.ruleId) ?? 0;
+          return aPos - bPos;
+        });
+      }
 
       setCategories(cats);
       setRows(initialRows);
@@ -203,9 +216,9 @@ export default function OnboardingFoundationalRulesScreen() {
 
         {/* Rules list */}
         <View style={styles.card}>
-          {FOUNDATIONAL_RULES.map((fr, i) => {
-            const row = rows.find(r => r.ruleId === fr.id);
-            if (!row) return null;
+          {rows.map((row, i) => {
+            const fr = FOUNDATIONAL_RULES.find(r => r.id === row.ruleId);
+            if (!fr) return null;
             const cat = categories.find(c => c.id === row.categoryId);
             const canToggle = row.categoryId !== null;
             return (
