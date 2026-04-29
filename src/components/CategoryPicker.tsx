@@ -12,6 +12,7 @@ interface CategoryOption {
   id:    string;
   name:  string;
   color: string;
+  emoji?: string | null;
 }
 
 interface Props {
@@ -27,11 +28,12 @@ export function CategoryPicker({ categories, selected, onSelect, showNone = fals
   const noneSelected = selected.includes(NONE_FILTER);
   const realSelected = selected.filter(s => s !== NONE_FILTER);
 
-  const pillLabel =
-    selected.length === 0                                   ? 'All Categories'
-    : selected.length === 1 && noneSelected                 ? 'No Category'
-    : selected.length === 1                                 ? (categories.find(c => c.id === selected[0])?.name ?? 'Category')
-    :                                                         `${selected.length} Categories`;
+  const singleCat   = selected.length === 1 && !noneSelected ? categories.find(c => c.id === selected[0]) : null;
+  const pillLabel   =
+    selected.length === 0       ? 'All Categories'
+    : selected.length === 1 && noneSelected ? 'No Category'
+    : singleCat                 ? `${singleCat.emoji ? singleCat.emoji + ' ' : ''}${singleCat.name}`
+    :                             `${selected.length} Categories`;
 
   function toggle(id: string) {
     onSelect(
@@ -96,7 +98,9 @@ export function CategoryPicker({ categories, selected, onSelect, showNone = fals
                   onPress={() => toggle(item.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.dot, { backgroundColor: item.color }]} />
+                  <View style={[styles.dot, { backgroundColor: item.color }]}>
+                    {item.emoji ? <Text style={styles.dotEmoji}>{item.emoji}</Text> : null}
+                  </View>
                   <Text style={styles.rowLabel}>{item.name}</Text>
                   {isSelected && <Text style={styles.checkmark}>✓</Text>}
                 </TouchableOpacity>
@@ -176,18 +180,21 @@ const styles = StyleSheet.create({
   rowBorder:   { borderTopWidth: 1, borderTopColor: colors.separator },
   rowSelected: { backgroundColor: colors.primaryLight },
   dot: {
-    width:        10,
-    height:       10,
-    borderRadius: radius.full,
-    marginRight:  spacing.sm,
+    width:           24,
+    height:          24,
+    borderRadius:    radius.full,
+    marginRight:     spacing.sm,
+    alignItems:      'center',
+    justifyContent:  'center',
   },
+  dotEmoji: { fontSize: 13 },
   dotEmpty: {
-    width:        10,
-    height:       10,
-    borderRadius: radius.full,
-    marginRight:  spacing.sm,
-    borderWidth:  1,
-    borderColor:  colors.border,
+    width:        24,
+    height:        24,
+    borderRadius:  radius.full,
+    marginRight:   spacing.sm,
+    borderWidth:   1,
+    borderColor:   colors.border,
   },
   rowLabel:  { fontFamily: font.semiBold, fontSize: 15, color: colors.text, flex: 1 },
   checkmark: { fontFamily: font.bold, fontSize: 15, color: colors.primary },
