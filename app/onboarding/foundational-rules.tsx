@@ -121,15 +121,21 @@ export default function OnboardingFoundationalRulesScreen() {
     }
     setSaving(true);
     try {
-      // Persist all rows. enabled=0 for any row missing a category (DB invariant).
-      await bulkUpsertFoundationalRuleSettings(
-        accountId,
-        rows.map(r => ({
+      // Validate category IDs against the categories we loaded from DB.
+      // Stale IDs from a seeded older account can fail the FK constraint if those
+      // categories were recreated with new UUIDs since the original rules were saved.
+      const validCatIds = new Set(categories.map(c => c.id));
+      const safeRows = rows.map(r => {
+        const catId = r.categoryId && validCatIds.has(r.categoryId) ? r.categoryId : null;
+        return {
           rule_id:     r.ruleId,
-          category_id: r.categoryId,
-          enabled:     r.enabled && r.categoryId !== null ? 1 : 0,
-        })),
-      );
+          category_id: catId,
+          enabled:     r.enabled && catId !== null ? 1 : 0,
+        };
+      });
+
+      // Persist all rows. enabled=0 for any row missing a category (DB invariant).
+      await bulkUpsertFoundationalRuleSettings(accountId, safeRows);
 
       // Apply rules to already-imported transactions.
       const applied = await autoApplyRulesForAccount(accountId);
@@ -151,13 +157,13 @@ export default function OnboardingFoundationalRulesScreen() {
     setSaving(true);
     try {
       // Write all 6 rows with enabled=0 so we don't re-prompt.
-      // Keep any pre-filled categoryIds so the user can flip them on later
-      // from the Rules screen without re-picking.
+      // Validate category IDs to avoid FK constraint errors (same as handleAccept).
+      const validCatIds = new Set(categories.map(c => c.id));
       await bulkUpsertFoundationalRuleSettings(
         accountId,
         rows.map(r => ({
           rule_id:     r.ruleId,
-          category_id: r.categoryId,
+          category_id: r.categoryId && validCatIds.has(r.categoryId) ? r.categoryId : null,
           enabled:     0,
         })),
       );
