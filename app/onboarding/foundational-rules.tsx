@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, Modal, SafeAreaView, Switch,
+  ActivityIndicator, Modal, SafeAreaView, Switch, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -115,6 +115,10 @@ export default function OnboardingFoundationalRulesScreen() {
   }
 
   async function handleAccept() {
+    if (!accountId) {
+      Alert.alert('Error', 'Account ID is missing. Please go back and try again.');
+      return;
+    }
     setSaving(true);
     try {
       // Persist all rows. enabled=0 for any row missing a category (DB invariant).
@@ -130,22 +134,20 @@ export default function OnboardingFoundationalRulesScreen() {
       // Apply rules to already-imported transactions.
       const applied = await autoApplyRulesForAccount(accountId);
 
-      router.replace({
-        pathname: '/onboarding/done',
-        params: {
-          accountId,
-          appliedFoundational: String(applied.byFoundational),
-          appliedTotal:        String(applied.total),
-        },
-      });
+      router.replace(
+        `/onboarding/done?accountId=${accountId}&appliedFoundational=${applied.byFoundational}&appliedTotal=${applied.total}`,
+      );
     } catch (e: any) {
-      // If apply fails, the user is left on this screen — they can retry.
-      console.warn('Foundational rules apply failed:', e);
       setSaving(false);
+      Alert.alert('Something went wrong', e?.message ?? 'Could not apply rules. Please try again.');
     }
   }
 
   async function handleSkip() {
+    if (!accountId) {
+      router.back();
+      return;
+    }
     setSaving(true);
     try {
       // Write all 6 rows with enabled=0 so we don't re-prompt.
@@ -161,8 +163,8 @@ export default function OnboardingFoundationalRulesScreen() {
       );
       router.back();
     } catch (e: any) {
-      console.warn('Foundational rules skip failed:', e);
       setSaving(false);
+      Alert.alert('Something went wrong', e?.message ?? 'Could not skip. Please try again.');
     }
   }
 
