@@ -264,7 +264,7 @@ home → /account/new → /account/[id]
 
 | Where | Condition |
 |---|---|
-| `app/index.tsx` `useFocusEffect` (intro) | `accounts.length === 0 && categories.length === 0 && getPreference('intro_completed') !== 'true'` → `router.push('/onboarding/intro')`. Guarded by an `introChecked` ref so it fires once per session. Order matters: intro check runs **before** the welcome-v4 check; the two are mutually exclusive (intro requires 0 accounts, welcome-v4 requires >0). |
+| `app/index.tsx` `useFocusEffect` (intro) | `accounts.length === 0 && categories.length === 0` → `router.push('/onboarding/intro')`. No `intro_completed` check — zero accounts AND zero categories always means setup is needed regardless of any stale preference. Guarded by an `introChecked` ref so it fires once per session. Order matters: intro check runs **before** the welcome-v4 check; the two are mutually exclusive (intro requires 0 accounts, welcome-v4 requires >0). |
 | `app/account/new.tsx` after `insertAccount` | Always appends `?showFoundationalOnboarding=1` to `router.replace`. |
 | `app/account/[id]/index.tsx` `useFocusEffect` | If `showFoundationalOnboarding === '1'` AND `getFoundationalRuleSettingsForAccount(id).length === 0` → `router.push('/onboarding/foundational-rules?accountId=X&first=…')`. Param is cleared via `router.setParams({ showFoundationalOnboarding: undefined })` and a ref guards against re-fire. |
 | `app/onboarding/categories.tsx` `handleContinue` | Sets `intro_completed = "true"` so the intro never re-triggers, even if the user later deletes everything. |
