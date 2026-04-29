@@ -537,4 +537,54 @@ describe('ordering contract: user rules before foundational rules', () => {
     expect(byFoundational).toBe(1);
     expect(byUserRule).toBe(1);
   });
+
+  /**
+   * Regression: foundational ruleIds must never be written to applied_rule_id.
+   *
+   * transactions.applied_rule_id has a FK: REFERENCES rules(id). Foundational
+   * rule IDs like "foundational:food-dining-restaurants" are virtual — they live
+   * in code, not in the rules table. Writing them to applied_rule_id triggers a
+   * FOREIGN KEY constraint error (SQLite error code 19).
+   *
+   * bulkSetTransactionCategories guards against this by substituting null for any
+   * ruleId that starts with "foundational:". The test below verifies the upstream
+   * contract: applyRulesToTransactions preserves the full "foundational:xxx" id in
+   * the assignment so the null-substitution can correctly identify it.
+   */
+  describe('applied_rule_id FK safety: foundational ruleIds must be nulled before DB write', () => {
+    it('foundational assignment carries the full foundational: prefix (contract for null substitution)', () => {
+      const rule = makeFoundationalRule('food-dining-restaurants', 'starbucks', 'cat-food');
+      const assignments = applyRulesToTransactions(
+        [makeTx('tx-1', 'STARBUCKS #123')],
+        [rule],
+      );
+      expect(assignments).toHaveLength(1);
+      // ruleId starts with "foundational:" — bulkSetTransactionCategories uses this
+      // to detect virtual IDs and write null to applied_rule_id instead.
+      expect(assignments[0].ruleId).toMatch(/^foundational:/);
+    });
+
+    it('user rule assignment does NOT start with foundational: (written as-is to applied_rule_id)', () => {
+      const rule = makeRule({ id: 'real-rule-uuid', match_type: 'contains', match_text: 'amazon', category_id: 'cat-shopping' });
+      const assignments = applyRulesToTransactions(
+        [makeTx('tx-1', 'AMAZON PRIME')],
+        [rule],
+      );
+      expect(assignments).toHaveLength(1);
+      expect(assignments[0].ruleId).toBe('real-rule-uuid');
+      expect(assignments[0].ruleId.startsWith('foundational:')).toBe(false);
+    });
+
+    it('null-substitution logic: foundational: → null, real id → unchanged', () => {
+      // Mirrors the exact expression used in bulkSetTransactionCategories:
+      //   a.ruleId.startsWith('foundational:') ? null : a.ruleId
+      const toAppliedRuleId = (ruleId: string) =>
+        ruleId.startsWith('foundational:') ? null : ruleId;
+
+      expect(toAppliedRuleId('foundational:food-dining-restaurants')).toBeNull();
+      expect(toAppliedRuleId('foundational:transportation-gas')).toBeNull();
+      expect(toAppliedRuleId('real-rule-uuid-123')).toBe('real-rule-uuid-123');
+      expect(toAppliedRuleId('')).toBe('');
+    });
+  });
 });

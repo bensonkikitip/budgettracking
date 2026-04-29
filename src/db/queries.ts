@@ -764,9 +764,14 @@ export async function bulkSetTransactionCategories(
       const setCategoryCase  = chunk.map(() => 'WHEN id = ? THEN ?').join(' ');
       const setRuleCase      = chunk.map(() => 'WHEN id = ? THEN ?').join(' ');
       const inPlaceholders   = chunk.map(() => '?').join(', ');
+      // Foundational rule IDs are virtual ("foundational:xxx") and don't exist
+      // in the rules table, so writing them to applied_rule_id (which has a FK
+      // REFERENCES rules(id)) would violate the constraint. Use null instead —
+      // the byFoundational count in autoApplyRulesForAccount is computed from the
+      // in-memory assignments array, not from the DB, so the count is unaffected.
       const params: (string | null)[] = [
         ...chunk.flatMap(a => [a.transactionId, a.categoryId]),
-        ...chunk.flatMap(a => [a.transactionId, a.ruleId]),
+        ...chunk.flatMap(a => [a.transactionId, a.ruleId.startsWith('foundational:') ? null : a.ruleId]),
         ...chunk.map(a => a.transactionId),
       ];
       await db.runAsync(
