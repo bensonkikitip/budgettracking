@@ -145,7 +145,8 @@ export default function OnboardingFoundationalRulesScreen() {
       );
     } catch (e: any) {
       setSaving(false);
-      Alert.alert('Something went wrong', e?.message ?? 'Could not apply rules. Please try again.');
+      const debug = `accountId="${String(accountId)}" cats=${categories.length}`;
+      Alert.alert('Something went wrong', `${e?.message ?? 'Unknown error'}\n\n[${debug}]`);
     }
   }
 
