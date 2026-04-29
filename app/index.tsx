@@ -65,6 +65,9 @@ export default function AccountsListScreen() {
   // ── v4 welcome check (fires once after first load) ────────────────────────
   const welcomeChecked = useRef(false);
 
+  // ── First-time onboarding check (fires once per session) ──────────────────
+  const introChecked = useRef(false);
+
   // ── refs ──────────────────────────────────────────────────────────────────
   const selectedMonthRef   = useRef('');
   const selectedYearRef    = useRef('');
@@ -235,6 +238,18 @@ export default function AccountsListScreen() {
       }
 
       if (active) setLoading(false);
+
+      // First-time user: zero accounts AND zero categories AND never completed
+      // intro → push to /onboarding/intro. Mutually exclusive with welcome-v4
+      // below (welcome-v4 requires accts.length > 0).
+      if (active && !introChecked.current && accts.length === 0 && allCats.length === 0) {
+        introChecked.current = true;
+        const introDone = await getPreference('intro_completed');
+        if (!introDone && active) {
+          router.push('/onboarding/intro');
+          return;
+        }
+      }
 
       // Show welcome-v4 sheet once for existing users upgrading from v3.x.
       // "Existing user" = has at least one account + hasn't seen the sheet.

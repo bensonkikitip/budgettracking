@@ -12,6 +12,7 @@ import {
   getDistinctYears, getTransactionsForYear,
   getAllCategories, setTransactionCategory, bulkManualSetCategory,
   getBudgetsForAccountYear, getActualsByCategoryMonth,
+  getFoundationalRuleSettingsForAccount,
 } from '../../../src/db/queries';
 import { writeBackupSafe } from '../../../src/db/backup';
 import { buildMonthList, buildYearList, MonthEntry, YearEntry } from '../../../src/domain/month';
@@ -32,9 +33,14 @@ import { centsToDollars } from '../../../src/domain/money';
 type ActualRow = { category_id: string; month: string; total_cents: number };
 
 export default function AccountDetailScreen() {
-  const { id }   = useLocalSearchParams<{ id: string }>();
+  const { id, showFoundationalOnboarding } =
+    useLocalSearchParams<{ id: string; showFoundationalOnboarding?: string }>();
   const router   = useRouter();
   const insets   = useSafeAreaInsets();
+
+  // Guard so the onboarding push fires once per param-pass — useLocalSearchParams
+  // can re-fire on focus or render before our setParams has cleared the flag.
+  const onboardingFiredRef = useRef(false);
 
   // ── existing state ────────────────────────────────────────────────────────
   const [account,               setAccount]               = useState<Account | null>(null);
@@ -148,6 +154,32 @@ export default function AccountDetailScreen() {
     })();
     return () => { active = false; };
   }, [id]));
+
+  // ── Foundational rules onboarding trigger ─────────────────────────────────
+  // Fires when /account/new redirects here with ?showFoundationalOnboarding=1.
+  // Only pushes if this account has no foundational_rule_settings rows yet —
+  // skipping a previous time writes enabled=0 rows, which prevent re-prompting.
+  useFocusEffect(useCallback(() => {
+    if (showFoundationalOnboarding !== '1' || onboardingFiredRef.current) return;
+    onboardingFiredRef.current = true;
+    let active = true;
+    (async () => {
+      const [existing, allAccts] = await Promise.all([
+        getFoundationalRuleSettingsForAccount(id),
+        getAllAccounts(),
+      ]);
+      if (!active) return;
+      // Strip the param so navigating back here later doesn't re-fire.
+      router.setParams({ showFoundationalOnboarding: undefined });
+      if (existing.length > 0) return; // user already saw onboarding for this account
+      const isFirst = allAccts.length === 1;
+      router.push({
+        pathname: '/onboarding/foundational-rules',
+        params: { accountId: id, first: isFirst ? '1' : '0' },
+      });
+    })();
+    return () => { active = false; };
+  }, [id, showFoundationalOnboarding]));
 
   async function handleMonthChange(month: string) {
     updateMonth(month);

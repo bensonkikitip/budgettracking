@@ -11,6 +11,7 @@ export type RacheyMoment =
   | 'noRules'
   | 'firstRule'
   | 'firstTransactionCategorized'
+  | 'firstFoundationalCategorization'
   | 'bulkCategorize'
   | 'firstBudget'
   | 'firstBackup'
@@ -114,6 +115,15 @@ export const RACHEY_QUOTES: Record<RacheyMoment, RacheyEntry> = {
       "Even my claws are impressed.",
       "Tidy money, tidy mind.",
       "Clean lists are good for the soul.",
+    ],
+  },
+  firstFoundationalCategorization: {
+    pose: 'thumbsUp',
+    lines: [
+      "Look at all that, already done. You barely lifted a finger.",
+      "Most of it sorted. The rest can wait.",
+      "I knew most of those merchants. The rest is up to us — together.",
+      "A good chunk handled. Rest your eyes for a sec.",
     ],
   },
   bulkCategorize: {

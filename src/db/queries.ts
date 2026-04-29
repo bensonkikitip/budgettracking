@@ -615,6 +615,28 @@ export async function deleteCategory(id: string): Promise<void> {
   await db.runAsync(`DELETE FROM categories WHERE id = ?`, id);
 }
 
+/**
+ * Bulk-insert categories in a single transaction. Used by the first-time
+ * onboarding flow to seed the user's starter categories. Idempotent on (id) —
+ * uses INSERT OR IGNORE so re-runs don't error.
+ */
+export async function bulkInsertCategories(
+  rows: Omit<Category, 'created_at'>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    for (const c of rows) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO categories (id, name, color, emoji, description, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        c.id, c.name, c.color, c.emoji ?? null, c.description ?? null, now,
+      );
+    }
+  });
+}
+
 // --- Rules ---
 
 export async function getRulesForAccount(accountId: string): Promise<Rule[]> {
@@ -968,6 +990,30 @@ export async function upsertFoundationalRuleSetting(
                                                      enabled     = excluded.enabled`,
     accountId, ruleId, categoryId, enabled, Date.now(),
   );
+}
+
+/**
+ * Bulk-upsert foundational rule settings for one account in a single
+ * transaction. Used by the per-account foundational-rules onboarding screen.
+ */
+export async function bulkUpsertFoundationalRuleSettings(
+  accountId: string,
+  rows: { rule_id: string; category_id: string | null; enabled: number }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  const now = Date.now();
+  await db.withTransactionAsync(async () => {
+    for (const r of rows) {
+      await db.runAsync(
+        `INSERT INTO foundational_rule_settings (account_id, rule_id, category_id, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(account_id, rule_id) DO UPDATE SET category_id = excluded.category_id,
+                                                         enabled     = excluded.enabled`,
+        accountId, r.rule_id, r.category_id, r.enabled, now,
+      );
+    }
+  });
 }
 
 /**

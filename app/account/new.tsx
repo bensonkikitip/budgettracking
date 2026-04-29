@@ -175,7 +175,9 @@ export default function AddAccountScreen() {
 
       writeBackupSafe();
       // Replace this screen so "back" from the account detail goes to Home.
-      router.replace(`/account/${newAccountId}`);
+      // The query param triggers the per-account foundational rules onboarding
+      // sheet on the account detail screen — see app/account/[id]/index.tsx.
+      router.replace(`/account/${newAccountId}?showFoundationalOnboarding=1`);
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Could not save account. Please try again.');
     } finally {

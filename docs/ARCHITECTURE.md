@@ -113,6 +113,10 @@ Expo Router maps the file tree directly to routes. `[id]` is a dynamic segment.
 | `/category/[id]/edit` | `category/[id]/edit.tsx` | Edit category (name + color + emoji + description). |
 | `/welcome-v4` | `welcome-v4.tsx` | Modal. Shown once to existing users after upgrading from v3.x (checked via `app_preferences.v4_welcomed`). Rachey waving. Lists 3 new v4.0 features. Two CTAs: emoji suggest or dismiss. Writes `v4_welcomed = "true"` and never shows again. |
 | `/welcome-v4-emoji-suggest` | `welcome-v4-emoji-suggest.tsx` | Modal. Loads all categories + emoji suggestions; user reviews/overrides per row; saves changed emojis in one pass. Skippable. |
+| `/onboarding/intro` | `onboarding/intro.tsx` | First-time user landing screen. Rachey waving + slogan + 1 CTA → categories step. Triggered by `app/index.tsx` when zero accounts AND zero categories AND `intro_completed` not set. |
+| `/onboarding/categories` | `onboarding/categories.tsx` | Checklist of 10 starter categories (all checked). Tap a row to inline-edit name + emoji. Uncheck to skip. "Save & continue" bulk-inserts checked rows via `bulkInsertCategories`, sets `intro_completed = "true"`, replaces to `/account/new`. |
+| `/onboarding/foundational-rules` | `onboarding/foundational-rules.tsx` | Per-account foundational rules sheet. Pushed from `app/account/[id]/index.tsx` when `?showFoundationalOnboarding=1` is set AND no `foundational_rule_settings` rows exist for the account. Lists 6 foundational rules with category dropdown + enable toggle. First account: pre-fills by name match against `defaultCategoryName`. 2nd+ account: copies from oldest other account. Accept → `bulkUpsertFoundationalRuleSettings` + `autoApplyRulesForAccount` → `/onboarding/done`. Skip → all rows written with `enabled=0` so the screen doesn't re-fire → `router.back()`. |
+| `/onboarding/done` | `onboarding/done.tsx` | Congrats screen after foundational rules apply. Shows "X transactions categorized!" using a `firstFoundationalCategorization` Rachey moment. CTA → replace to `/account/${accountId}`. |
 
 ---
 
@@ -232,11 +236,51 @@ Implemented in [`app/index.tsx`](../app/index.tsx), [`app/welcome-v4.tsx`](../ap
 4. `welcome-v4-emoji-suggest` loads categories, runs `suggestEmojisForCategories`, lets the user review/override per row, then saves only changed emojis via `updateCategory`.
 5. Once `v4_welcomed = 'true'` is persisted in `app_preferences`, the check on re-open exits immediately — the sheet never shows again.
 
-New users (zero accounts) skip the flow entirely — the home screen empty state handles onboarding.
+New users (zero accounts) get the FTUE flow below instead — the welcome-v4 sheet only fires for existing users.
+
+### First-time user experience (v4.1)
+
+Implemented in [`app/onboarding/`](../app/onboarding/) (4 screens) plus trigger logic in `app/index.tsx`, `app/account/new.tsx`, and `app/account/[id]/index.tsx`. Source-of-truth constants in [`src/domain/starter-categories.ts`](../src/domain/starter-categories.ts) and [`src/domain/foundational-rules.ts`](../src/domain/foundational-rules.ts).
+
+**Flow A — first-time user (zero accounts AND zero categories):**
+
+```
+home (empty) → /onboarding/intro → /onboarding/categories
+  → /account/new → /account/[id] (after inline import)
+    → /onboarding/foundational-rules?accountId=X&first=1
+      → accept: apply rules → /onboarding/done → /account/[id]
+      → skip: enabled=0 rows written → /account/[id]
+```
+
+**Flow B — adding 2nd, 3rd, n+1 account:**
+
+```
+home → /account/new → /account/[id]
+  → /onboarding/foundational-rules?accountId=X (first=0; pre-filled from oldest account)
+    → accept / skip → same as Flow A
+```
+
+**Trigger gates:**
+
+| Where | Condition |
+|---|---|
+| `app/index.tsx` `useFocusEffect` (intro) | `accounts.length === 0 && categories.length === 0 && getPreference('intro_completed') !== 'true'` → `router.push('/onboarding/intro')`. Guarded by an `introChecked` ref so it fires once per session. Order matters: intro check runs **before** the welcome-v4 check; the two are mutually exclusive (intro requires 0 accounts, welcome-v4 requires >0). |
+| `app/account/new.tsx` after `insertAccount` | Always appends `?showFoundationalOnboarding=1` to `router.replace`. |
+| `app/account/[id]/index.tsx` `useFocusEffect` | If `showFoundationalOnboarding === '1'` AND `getFoundationalRuleSettingsForAccount(id).length === 0` → `router.push('/onboarding/foundational-rules?accountId=X&first=…')`. Param is cleared via `router.setParams({ showFoundationalOnboarding: undefined })` and a ref guards against re-fire. |
+| `app/onboarding/categories.tsx` `handleContinue` | Sets `intro_completed = "true"` so the intro never re-triggers, even if the user later deletes everything. |
+
+**Pre-fill logic** (`app/onboarding/foundational-rules.tsx`):
+
+1. Look up the user's oldest OTHER account (excluding the current one). If it has any `foundational_rule_settings` rows, copy them.
+2. Otherwise (this is the first account, or the older account never had settings): for each `FoundationalRule`, find the user's category whose `name.toLowerCase()` matches `defaultCategoryName.toLowerCase()`. The starter category names are intentionally aligned with the foundational rules' default names so this matching always succeeds for the 6 rule-backed buckets.
+
+**Skip persistence:** Tapping "Skip for now" writes all 6 settings with `enabled=0`. Because the trigger checks `existing.length > 0`, the screen never re-fires for that account. The user enables foundational rules later from `/account/[id]/rules`.
 
 ### App preferences
 
-`app_preferences` is a simple key/value table (see [SCHEMA.md](SCHEMA.md#app_preferences)). Access via `getPreference(key)` and `setPreference(key, value)` in `src/db/queries.ts`. Used for one-time flags like `v4_welcomed`. v4.1 will add `tutorial_completed` and `tutorial_declined`.
+`app_preferences` is a simple key/value table (see [SCHEMA.md](SCHEMA.md#app_preferences)). Access via `getPreference(key)` and `setPreference(key, value)` in `src/db/queries.ts`. Used for one-time flags:
+- `v4_welcomed` — set after the existing-user welcome sheet dismisses (v4.0)
+- `intro_completed` — set after the first-time user finishes the categories onboarding step (v4.1)
 
 ---
 

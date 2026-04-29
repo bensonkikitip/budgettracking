@@ -21,10 +21,10 @@ describe('rachey-quotes', () => {
     }
   });
 
-  it('all 50 lines across the pool are unique strings', () => {
+  it('all 54 lines across the pool are unique strings', () => {
     const all = Object.values(RACHEY_QUOTES).flatMap(e => e.lines);
     const unique = new Set(all);
-    expect(unique.size).toBe(50);
+    expect(unique.size).toBe(54);
   });
 
   it('every moment has at least 3 lines for variety', () => {
