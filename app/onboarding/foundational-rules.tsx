@@ -26,6 +26,7 @@ import {
   getFoundationalRuleSettingsForAccount,
   bulkUpsertFoundationalRuleSettings,
 } from '../../src/db/queries';
+import { getDb } from '../../src/db/client';
 import { FOUNDATIONAL_RULES } from '../../src/domain/foundational-rules';
 import { autoApplyRulesForAccount } from '../../src/domain/rules-engine';
 import { Sloth } from '../../src/components/Sloth';
@@ -145,8 +146,28 @@ export default function OnboardingFoundationalRulesScreen() {
       );
     } catch (e: any) {
       setSaving(false);
-      const debug = `accountId="${String(accountId)}" cats=${categories.length}`;
-      Alert.alert('Something went wrong', `${e?.message ?? 'Unknown error'}\n\n[${debug}]`);
+      try {
+        const db = await getDb();
+        const acctRow = await db.getFirstAsync<{ id: string }>(
+          `SELECT id FROM accounts WHERE id = ?`, accountId,
+        );
+        const catCount = await db.getFirstAsync<{ n: number }>(
+          `SELECT COUNT(*) as n FROM categories`,
+        );
+        const firstCatId = rows[0]?.categoryId ?? 'none';
+        const catRow = firstCatId !== 'none'
+          ? await db.getFirstAsync<{ id: string }>(`SELECT id FROM categories WHERE id = ?`, firstCatId)
+          : null;
+        const debug = [
+          `acct_in_db=${acctRow ? 'YES' : 'NO'}`,
+          `cats_in_db=${catCount?.n ?? '?'}`,
+          `firstCatId="${firstCatId}"`,
+          `firstCat_in_db=${catRow ? 'YES' : 'NO'}`,
+        ].join(' ');
+        Alert.alert('Something went wrong', `${e?.message ?? 'Unknown error'}\n\n[${debug}]`);
+      } catch {
+        Alert.alert('Something went wrong', e?.message ?? 'Unknown error');
+      }
     }
   }
 
