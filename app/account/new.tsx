@@ -98,18 +98,21 @@ export default function AddAccountScreen() {
 
     setSaving(true);
     try {
-      const csvFormat: CsvFormat = 'custom';
+      const newAccountId = Crypto.randomUUID();
       await insertAccount({
-        id:            Crypto.randomUUID(),
+        id:            newAccountId,
         name:          name.trim(),
         type,
-        csv_format:    csvFormat,
+        csv_format:    'custom',
         column_config: JSON.stringify(config),
         suggest_rules: 1,
         created_at:    Date.now(),
       });
       writeBackupSafe();
-      router.back();
+      // Go directly to the import screen — the CSV preview during account setup
+      // is only for column detection; no transactions are imported until here.
+      // replace() so "back" from import goes home, not back to this form.
+      router.replace(`/account/${newAccountId}/import`);
     } catch {
       Alert.alert('Error', 'Could not save account. Please try again.');
     } finally {
@@ -235,7 +238,7 @@ export default function AddAccountScreen() {
         disabled={!canSave}
         activeOpacity={0.85}
       >
-        <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Add Account'}</Text>
+        <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Add Account & Import →'}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
