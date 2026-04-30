@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
 
   csvGuideLink: {
-    fontFamily: font.semiBold,
+    fontFamily: font.bold,
     fontSize:   13,
     color:      colors.primary,
     marginLeft: spacing.xs,
