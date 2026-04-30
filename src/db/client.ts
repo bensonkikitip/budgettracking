@@ -1,30 +1,17 @@
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
+import { snapshotAllTables, BACKUP_PATH } from './backup';
 
 const LATEST_DB_VERSION = 11;
 
 // Written before any migration runs so the user can always roll back.
-// Uses the same path and format as writeBackup() in backup.ts.
-// Each table query is individually guarded — if a table doesn't exist yet
-// (e.g. rules before migration 005) it is recorded as an empty array.
+// Uses snapshotAllTables (in backup.ts) so the file format always matches the
+// current backup version and table set automatically — adding a new table to
+// the backup doesn't require touching this function.
 async function writePreMigrationBackup(db: SQLite.SQLiteDatabase): Promise<void> {
   try {
-    const safe = async (sql: string) => {
-      try { return await db.getAllAsync<any>(sql); } catch { return []; }
-    };
-    const [accounts, import_batches, transactions, categories, rules] = await Promise.all([
-      safe('SELECT * FROM accounts ORDER BY created_at ASC'),
-      safe('SELECT * FROM import_batches ORDER BY imported_at ASC'),
-      safe('SELECT * FROM transactions ORDER BY created_at ASC'),
-      safe('SELECT * FROM categories ORDER BY created_at ASC'),
-      safe('SELECT * FROM rules ORDER BY priority ASC'),
-    ]);
-    const payload = JSON.stringify({
-      version: 2, exported_at: Date.now(),
-      accounts, import_batches, transactions, categories, rules,
-    });
-    const path = (FileSystem.documentDirectory ?? '') + 'slo-n-ready-backup.json';
-    await FileSystem.writeAsStringAsync(path, payload);
+    const data = await snapshotAllTables(db);
+    await FileSystem.writeAsStringAsync(BACKUP_PATH, JSON.stringify(data));
   } catch {
     // Never block a migration because a backup failed
   }

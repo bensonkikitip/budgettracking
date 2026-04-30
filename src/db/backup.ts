@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as SQLite from 'expo-sqlite';
 import { getDb } from './client';
 
 export const BACKUP_PATH = (FileSystem.documentDirectory ?? '') + 'slo-n-ready-backup.json';
@@ -41,24 +42,29 @@ export async function getBackupInfo(): Promise<BackupInfo> {
   }
 }
 
-// IMPORTANT: writeBackup and restoreFromData must always handle the same set of tables.
-// If you add a table to one, add it to the other in the same edit.
-export async function writeBackup(): Promise<void> {
-  const db = await getDb();
+// Snapshots every backup-tracked table for the given db connection. Each query is
+// guarded so a missing table (e.g. app_preferences before migration 10) returns []
+// instead of throwing. This is the single source of truth used by both writeBackup
+// and the pre-migration snapshot in client.ts — when a new table is added, only
+// this function needs updating.
+export async function snapshotAllTables(db: SQLite.SQLiteDatabase): Promise<BackupData> {
+  const safe = async (sql: string): Promise<any[]> => {
+    try { return await db.getAllAsync<any>(sql); } catch { return []; }
+  };
   const [
     accounts, import_batches, transactions, categories, rules, budgets,
     foundational_rule_settings, app_preferences,
   ] = await Promise.all([
-    db.getAllAsync<any>('SELECT * FROM accounts ORDER BY created_at ASC'),
-    db.getAllAsync<any>('SELECT * FROM import_batches ORDER BY imported_at ASC'),
-    db.getAllAsync<any>('SELECT * FROM transactions ORDER BY created_at ASC'),
-    db.getAllAsync<any>('SELECT * FROM categories ORDER BY created_at ASC'),
-    db.getAllAsync<any>('SELECT * FROM rules ORDER BY priority ASC'),
-    db.getAllAsync<any>('SELECT * FROM budgets ORDER BY account_id, category_id, month'),
-    db.getAllAsync<any>('SELECT * FROM foundational_rule_settings ORDER BY account_id, rule_id'),
-    db.getAllAsync<any>('SELECT * FROM app_preferences ORDER BY key'),
+    safe('SELECT * FROM accounts ORDER BY created_at ASC'),
+    safe('SELECT * FROM import_batches ORDER BY imported_at ASC'),
+    safe('SELECT * FROM transactions ORDER BY created_at ASC'),
+    safe('SELECT * FROM categories ORDER BY created_at ASC'),
+    safe('SELECT * FROM rules ORDER BY priority ASC'),
+    safe('SELECT * FROM budgets ORDER BY account_id, category_id, month'),
+    safe('SELECT * FROM foundational_rule_settings ORDER BY account_id, rule_id'),
+    safe('SELECT * FROM app_preferences ORDER BY key'),
   ]);
-  const data: BackupData = {
+  return {
     version:                    4,
     exported_at:                Date.now(),
     accounts,
@@ -70,6 +76,13 @@ export async function writeBackup(): Promise<void> {
     foundational_rule_settings,
     app_preferences,
   };
+}
+
+// IMPORTANT: snapshotAllTables and restoreFromData must always handle the same set
+// of tables. If you add a table to one, add it to the other in the same edit.
+export async function writeBackup(): Promise<void> {
+  const db = await getDb();
+  const data = await snapshotAllTables(db);
   await FileSystem.writeAsStringAsync(BACKUP_PATH, JSON.stringify(data));
 }
 
