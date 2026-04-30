@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { usePeriodFilter } from '../src/hooks/usePeriodFilter';
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, ActivityIndicator, ImageBackground, Alert,
@@ -40,55 +41,43 @@ export default function AccountsListScreen() {
   const router   = useRouter();
   const insets   = useSafeAreaInsets();
 
-  // ── existing state ────────────────────────────────────────────────────────
+  // ── period / view filters (state + matching refs for async paths) ────────
+  const {
+    month:         selectedMonth,
+    year:          selectedYear,
+    filterMode,
+    viewMode,
+    categoryFilters,
+    setMonth:           updateMonth,
+    setYear:            updateYear,
+    setFilterMode:      updateMode,
+    setViewMode:        updateViewMode,
+    setCategoryFilters: updateCategoryFilters,
+    refs:               periodRefs,
+    yearForCurrentPeriod,
+  } = usePeriodFilter();
+
+  // ── other screen state ───────────────────────────────────────────────────
   const [accounts,             setAccounts]             = useState<AccountWithSummary[]>([]);
   const [allSummary,           setAllSummary]           = useState<AccountSummary | null>(null);
   const [months,               setMonths]               = useState<MonthEntry[]>([]);
   const [years,                setYears]                = useState<YearEntry[]>([]);
-  const [selectedMonth,        setSelectedMonth]        = useState('');
-  const [selectedYear,         setSelectedYear]         = useState('');
-  const [filterMode,           setFilterMode]           = useState<FilterMode>('month');
   const [loading,              setLoading]              = useState(true);
   const [hasBackup,            setHasBackup]            = useState(false);
   const [categories,           setCategories]           = useState<Category[]>([]);
-  const [categoryFilters,      setCategoryFilters]      = useState<string[]>([]);
   const [categoriesInPeriod,   setCategoriesInPeriod]   = useState<Category[]>([]);
 
   // ── Budget view state ─────────────────────────────────────────────────────
-  const [viewMode,       setViewMode]       = useState<'activity' | 'budget'>('activity');
   const [budgetDataYear, setBudgetDataYear] = useState<string | null>(null);
   const [allBudgetRows,  setAllBudgetRows]  = useState<Budget[]>([]);
   const [allActualsRows, setAllActualsRows] = useState<ActualRowByAccount[]>([]);
 
   const [racheyMoment, setRacheyMoment] = useState<'firstAccount' | null>(null);
 
-  // ── v4 welcome check (fires once after first load) ────────────────────────
-  const welcomeChecked = useRef(false);
-
-  // ── First-time onboarding check (fires once per session) ──────────────────
-  const introChecked = useRef(false);
-
-  // ── refs ──────────────────────────────────────────────────────────────────
-  const selectedMonthRef   = useRef('');
-  const selectedYearRef    = useRef('');
-  const filterModeRef      = useRef<FilterMode>('month');
-  const categoryFiltersRef = useRef<string[]>([]);
-  const viewModeRef        = useRef<'activity' | 'budget'>('activity');
-  const prevAccountCount   = useRef(-1);
-
-  function updateMonth(m: string) { selectedMonthRef.current = m; setSelectedMonth(m); }
-  function updateYear(y: string)  { selectedYearRef.current  = y; setSelectedYear(y);  }
-  function updateMode(m: FilterMode) { filterModeRef.current = m; setFilterMode(m);    }
-  function updateCategoryFilters(ids: string[]) {
-    categoryFiltersRef.current = ids;
-    setCategoryFilters(ids);
-  }
-  function updateViewMode(v: 'activity' | 'budget') { viewModeRef.current = v; setViewMode(v); }
-
-  function yearForCurrentPeriod(): string {
-    if (filterModeRef.current === 'year') return selectedYearRef.current;
-    return selectedMonthRef.current.slice(0, 4);
-  }
+  // ── one-shot guards ──────────────────────────────────────────────────────
+  const welcomeChecked   = useRef(false);
+  const introChecked     = useRef(false);
+  const prevAccountCount = useRef(-1);
 
   // ── budget data loading ───────────────────────────────────────────────────
   async function loadBudgetData(year: string) {
@@ -185,10 +174,10 @@ export default function AccountsListScreen() {
       const monthList = buildMonthList(dbMonths);
       const yearList  = buildYearList(dbYears);
 
-      const curMonth  = selectedMonthRef.current;
-      const curYear   = selectedYearRef.current;
-      const curMode   = filterModeRef.current;
-      const curCatIds = categoryFiltersRef.current;
+      const curMonth  = periodRefs.month.current;
+      const curYear   = periodRefs.year.current;
+      const curMode   = periodRefs.filterMode.current;
+      const curCatIds = periodRefs.categoryFilters.current;
 
       const month = (curMonth && monthList.some(m => m.key === curMonth))
         ? curMonth
@@ -223,7 +212,7 @@ export default function AccountsListScreen() {
 
       // Invalidate budget cache; reload if Budget view is active
       setBudgetDataYear(null);
-      if (viewModeRef.current === 'budget') {
+      if (periodRefs.viewMode.current === 'budget') {
         const yr = curMode === 'year' ? year : month.slice(0, 4);
         if (yr) {
           const [b, a] = await Promise.all([
@@ -270,7 +259,7 @@ export default function AccountsListScreen() {
       loadSummaries(accounts.map(a => a), 'month', month, []),
       refreshCategoriesInPeriod('month', month, categories),
     ]);
-    if (viewModeRef.current === 'budget') void loadBudgetData(month.slice(0, 4));
+    if (periodRefs.viewMode.current === 'budget') void loadBudgetData(month.slice(0, 4));
   }
 
   async function handleYearChange(year: string) {
@@ -281,13 +270,13 @@ export default function AccountsListScreen() {
       loadSummaries(accounts.map(a => a), 'year', year, []),
       refreshCategoriesInPeriod('year', year, categories),
     ]);
-    if (viewModeRef.current === 'budget') void loadBudgetData(year);
+    if (periodRefs.viewMode.current === 'budget') void loadBudgetData(year);
   }
 
   async function handleCategoryFilterChange(ids: string[]) {
     updateCategoryFilters(ids);
-    const mode   = filterModeRef.current;
-    const period = mode === 'year' ? selectedYearRef.current : selectedMonthRef.current;
+    const mode   = periodRefs.filterMode.current;
+    const period = mode === 'year' ? periodRefs.year.current : periodRefs.month.current;
     await loadSummaries(accounts.map(a => a), mode, period, ids);
   }
 
