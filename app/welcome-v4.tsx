@@ -79,11 +79,11 @@ export default function WelcomeV4Screen() {
             style={styles.primaryBtn}
             onPress={() => {
               setPreference('v4_welcomed', 'true');
-              router.replace('/welcome-v4-emoji-suggest');
+              router.replace('/categories');
             }}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>Suggest emojis for my categories →</Text>
+            <Text style={styles.primaryBtnText}>Add emojis to your categories →</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
