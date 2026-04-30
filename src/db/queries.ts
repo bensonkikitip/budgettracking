@@ -685,8 +685,13 @@ export async function updateRule(
 }
 
 export async function deleteRule(id: string): Promise<void> {
+  // Migration 12 dropped the FK on transactions.applied_rule_id, so the
+  // previous ON DELETE SET NULL behavior is now enforced here in code.
   const db = await getDb();
-  await db.runAsync(`DELETE FROM rules WHERE id = ?`, id);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`UPDATE transactions SET applied_rule_id = NULL WHERE applied_rule_id = ?`, id);
+    await db.runAsync(`DELETE FROM rules WHERE id = ?`, id);
+  });
 }
 
 export async function reorderRules(orderedIds: string[]): Promise<void> {

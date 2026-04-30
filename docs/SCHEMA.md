@@ -6,7 +6,7 @@
 
 **Database**: local SQLite file `budgetapp.db`, opened via `expo-sqlite`.
 **Foreign keys**: enabled (`PRAGMA foreign_keys = ON`). Cascading deletes are intentional.
-**Schema version**: tracked via `PRAGMA user_version`. Current = **11** (v4.1).
+**Schema version**: tracked via `PRAGMA user_version`. Current = **12** (v4.2).
 
 ---
 
@@ -78,7 +78,7 @@ Individual transactions imported from CSVs.
 | `created_at` | `INTEGER NOT NULL` | ms timestamp. |
 | `category_id` | `TEXT REFERENCES categories(id) ON DELETE SET NULL` | Nullable. |
 | `category_set_manually` | `INTEGER NOT NULL DEFAULT 0` | 1 = user picked it; 0 = rule applied (or none). Manual rows are skipped by rule auto-apply. |
-| `applied_rule_id` | `TEXT REFERENCES rules(id) ON DELETE SET NULL` | Which rule categorized this row (null if manual or uncategorized). |
+| `applied_rule_id` | `TEXT` | Which rule categorized this row. Contract: `NULL` (manual or uncategorized), a real `rules.id` (user rule), or `'foundational:<rule_id>'` (built-in rule). **No FK** — the foreign key was dropped in migration 12 to allow synthetic foundational IDs. `ON DELETE SET NULL` for user rules is now enforced in code: `deleteRule` clears matching rows. |
 
 **Indexes**:
 - `idx_tx_account_date` on `(account_id, date DESC)`
@@ -264,6 +264,8 @@ All migrations live in [`src/db/client.ts`](../src/db/client.ts) under `getDb()`
 | 8 | `accounts.suggest_rules` (default 1). |
 | 9 | Adds `budgets` table + `idx_budgets_account_month` index. |
 | 10 | Adds `categories.emoji` and `categories.description` (both nullable). Adds `foundational_rule_settings` table + `idx_foundational_settings_account`. Adds `app_preferences` table. |
+| 11 | Adds `foundational_rule_settings.sort_order` (per-account display/run order). Backfills the optimal default order. |
+| 12 | Recreates `transactions` to drop the FK on `applied_rule_id` so synthetic `'foundational:<id>'` IDs can be persisted. Backfills `applied_rule_id` for existing rows that pre-fix code categorized via foundational rules but stored NULL. `deleteRule` now clears `applied_rule_id` in code (replacing the dropped `ON DELETE SET NULL` cascade). |
 
 **Pre-migration backup**: before any pending migration runs, [`writePreMigrationBackup`](../src/db/client.ts) writes a snapshot of all known tables to `Documents/slo-n-ready-backup.json` so the user can roll back if a migration fails. Don't bypass this.
 

@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { snapshotAllTables, BACKUP_PATH } from './backup';
 
-const LATEST_DB_VERSION = 11;
+const LATEST_DB_VERSION = 12;
 
 // Written before any migration runs so the user can always roll back.
 // Uses snapshotAllTables (in backup.ts) so the file format always matches the
@@ -311,6 +311,122 @@ async function _init(): Promise<SQLite.SQLiteDatabase> {
       } catch {}
     }
     await db.execAsync('PRAGMA user_version = 11');
+  }
+
+  if (version < 12) {
+    // Drops the FK on transactions.applied_rule_id so synthetic foundational
+    // rule IDs ('foundational:<id>') can be persisted alongside real rules.id
+    // values. SQLite can't ALTER a FK constraint, so we recreate the table
+    // (mirrors the migration-006 pattern). Safe to retry: drops any leftover
+    // transactions_new from a previous partial run, and only copies/drops the
+    // original transactions table if it still exists.
+    await db.execAsync('PRAGMA foreign_keys = OFF');
+    try {
+      await db.execAsync('DROP TABLE IF EXISTS transactions_new');
+
+      await db.execAsync(`
+        CREATE TABLE transactions_new (
+          id                    TEXT PRIMARY KEY,
+          account_id            TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          date                  TEXT NOT NULL,
+          amount_cents          INTEGER NOT NULL,
+          description           TEXT NOT NULL,
+          original_description  TEXT NOT NULL,
+          is_pending            INTEGER NOT NULL DEFAULT 0,
+          dropped_at            INTEGER DEFAULT NULL,
+          import_batch_id       TEXT NOT NULL REFERENCES import_batches(id),
+          created_at            INTEGER NOT NULL,
+          category_id           TEXT REFERENCES categories(id) ON DELETE SET NULL,
+          category_set_manually INTEGER NOT NULL DEFAULT 0,
+          applied_rule_id       TEXT
+        )
+      `);
+
+      const row = await db.getFirstAsync<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='transactions'`,
+      );
+      if (row && row.n > 0) {
+        await db.execAsync(`
+          INSERT INTO transactions_new
+            (id, account_id, date, amount_cents, description, original_description,
+             is_pending, dropped_at, import_batch_id, created_at,
+             category_id, category_set_manually, applied_rule_id)
+          SELECT
+             id, account_id, date, amount_cents, description, original_description,
+             is_pending, dropped_at, import_batch_id, created_at,
+             category_id, category_set_manually, applied_rule_id
+          FROM transactions
+        `);
+        await db.execAsync(`DROP TABLE transactions`);
+      }
+      await db.execAsync(`ALTER TABLE transactions_new RENAME TO transactions`);
+      await db.execAsync(`DROP INDEX IF EXISTS idx_tx_account_date`);
+      await db.execAsync(`DROP INDEX IF EXISTS idx_tx_date`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_tx_account_date ON transactions (account_id, date DESC)`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_tx_date         ON transactions (date DESC)`);
+
+      // Backfill applied_rule_id for transactions that pre-fix code categorized
+      // via a foundational rule but stored NULL (because the FK rejected the
+      // synthetic id). Without this, existing users see "Applied 0 times" on
+      // foundational rules until they re-import.
+      const settings = await db.getAllAsync<{
+        account_id: string; rule_id: string; category_id: string | null;
+        enabled: number; created_at: number;
+      }>(
+        `SELECT * FROM foundational_rule_settings WHERE enabled = 1 AND category_id IS NOT NULL`,
+      );
+      if (settings.length > 0) {
+        // Dynamic imports avoid the load-order cycle at module init.
+        const { FOUNDATIONAL_RULES } = await import('../domain/foundational-rules');
+        const { applyRulesToTransactions } = await import('../domain/rules-engine');
+
+        const rulesByAccount = new Map<string, any[]>();
+        for (const s of settings) {
+          const fr = FOUNDATIONAL_RULES.find(r => r.id === s.rule_id);
+          if (!fr || !s.category_id) continue;
+          const rule = {
+            id:          `foundational:${fr.id}`,
+            account_id:  s.account_id,
+            category_id: s.category_id,
+            match_type:  fr.conditions[0].match_type,
+            match_text:  fr.conditions[0].match_text,
+            logic:       fr.logic as 'AND' | 'OR',
+            conditions:  fr.conditions,
+            priority:    9999,
+            created_at:  s.created_at,
+          };
+          const list = rulesByAccount.get(s.account_id) ?? [];
+          list.push(rule);
+          rulesByAccount.set(s.account_id, list);
+        }
+
+        for (const [accountId, rules] of rulesByAccount) {
+          const txs = await db.getAllAsync<{
+            id: string; description: string; amount_cents: number; category_set_manually: number;
+          }>(
+            `SELECT id, description, amount_cents, category_set_manually
+             FROM transactions
+             WHERE account_id = ?
+               AND category_id IS NOT NULL
+               AND category_set_manually = 0
+               AND applied_rule_id IS NULL`,
+            accountId,
+          );
+          if (txs.length === 0) continue;
+          const assignments = applyRulesToTransactions(txs, rules);
+          for (const a of assignments) {
+            await db.runAsync(
+              `UPDATE transactions SET applied_rule_id = ? WHERE id = ?`,
+              a.ruleId, a.transactionId,
+            );
+          }
+        }
+      }
+
+      await db.execAsync('PRAGMA user_version = 12');
+    } finally {
+      await db.execAsync('PRAGMA foreign_keys = ON');
+    }
   }
 
   _db = db;
