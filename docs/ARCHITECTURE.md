@@ -179,7 +179,7 @@ Implemented in [`src/domain/rules-engine.ts`](../src/domain/rules-engine.ts) and
 - Six built-in rules (`FOUNDATIONAL_RULES` in `foundational-rules.ts`): Food & Dining, Groceries, Transportation, Entertainment, Shopping, Health.
 - The rule **logic** (conditions, merchant patterns) lives in code, not the DB. User state (which rules are enabled, what category each maps to, per account) lives in `foundational_rule_settings`.
 - `getActiveFoundationalRulesAsRules(accountId)` hydrates code-side rules with the account's DB state. SQL filter: `enabled = 1 AND category_id IS NOT NULL`. Returns `Rule`-shaped objects with `id = 'foundational:<rule_id>'`.
-- Applied counts are free: `applied_rule_id = 'foundational:food-dining'` is written to the transaction, and the existing `getRuleAppliedCounts` query picks it up by `GROUP BY applied_rule_id`.
+- Applied counts are free: `applied_rule_id = 'foundational:food-dining'` is written to the transaction (the FK on this column was dropped in migration 12 so synthetic IDs persist), and the existing `getRuleAppliedCounts` query picks it up by `GROUP BY applied_rule_id`.
 
 **Ordering contract** (never reorder without explicit approval):
 ```

@@ -761,20 +761,18 @@ export async function bulkSetTransactionCategories(
   const db = await getDb();
   // Each row uses 3 variables; chunk to stay well under the 999-variable SQLite limit
   const CHUNK = 100;
+  // applied_rule_id contract (post migration 12): NULL, a real rules.id, or
+  // 'foundational:<rule_id>'. Foundational IDs are persisted directly so the
+  // standard getRuleAppliedCounts aggregate picks them up.
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < assignments.length; i += CHUNK) {
       const chunk = assignments.slice(i, i + CHUNK);
       const setCategoryCase  = chunk.map(() => 'WHEN id = ? THEN ?').join(' ');
       const setRuleCase      = chunk.map(() => 'WHEN id = ? THEN ?').join(' ');
       const inPlaceholders   = chunk.map(() => '?').join(', ');
-      // Foundational rule IDs are virtual ("foundational:xxx") and don't exist
-      // in the rules table, so writing them to applied_rule_id (which has a FK
-      // REFERENCES rules(id)) would violate the constraint. Use null instead —
-      // the byFoundational count in autoApplyRulesForAccount is computed from the
-      // in-memory assignments array, not from the DB, so the count is unaffected.
-      const params: (string | null)[] = [
+      const params: string[] = [
         ...chunk.flatMap(a => [a.transactionId, a.categoryId]),
-        ...chunk.flatMap(a => [a.transactionId, a.ruleId.startsWith('foundational:') ? null : a.ruleId]),
+        ...chunk.flatMap(a => [a.transactionId, a.ruleId]),
         ...chunk.map(a => a.transactionId),
       ];
       await db.runAsync(
