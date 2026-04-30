@@ -136,12 +136,10 @@ export async function getAllAccounts(): Promise<Account[]> {
 }
 
 export async function deleteAccount(id: string): Promise<void> {
+  // FK ON DELETE CASCADE (with PRAGMA foreign_keys = ON in getDb) handles
+  // transactions, import_batches, rules, budgets, and foundational_rule_settings.
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(`DELETE FROM transactions   WHERE account_id = ?`, id);
-    await db.runAsync(`DELETE FROM import_batches WHERE account_id = ?`, id);
-    await db.runAsync(`DELETE FROM accounts       WHERE id = ?`, id);
-  });
+  await db.runAsync(`DELETE FROM accounts WHERE id = ?`, id);
 }
 
 // --- Import batches ---
