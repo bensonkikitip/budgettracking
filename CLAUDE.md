@@ -21,6 +21,7 @@ Run before every release. Pre-flight steps are non-negotiable.
 2. `npm run typecheck` — must pass.
 3. Smoke-test on Expo Go or Simulator: launch the app and navigate to anything you changed.
 4. Confirm `slo-n-ready-backup.json` is NOT staged (`git status` should not list it).
+5. **Every bug fix that touches `src/db/` must include a regression test under `tests/db/`** that fails on pre-fix code and passes on post-fix code. We've shipped four DB-layer regressions (FK crashes, restore column losses, applied-count zeroes) that integration tests would have caught — this rule exists so we stop. The test runs against an in-memory SQLite via `tests/helpers/db.ts`'s `createTestDb()`; it's fast (~200ms cold).
 
 ### Update docs (mandatory when applicable)
 5. **Update `docs/SCHEMA.md`** if any DB change was made:

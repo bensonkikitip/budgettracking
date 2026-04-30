@@ -301,16 +301,22 @@ Rows are never deleted on drop — keeping the row preserves audit trail and let
 ## Testing
 
 - `npm test` runs the Jest suite.
-- DB and domain logic are tested as pure functions where possible. UI is exercised manually in Expo Go.
-- Mocks for Expo modules live under [`tests/__mocks__/`](../tests/__mocks__/) (e.g. `expo-file-system-legacy.ts`).
-- When you add a new domain helper or non-trivial query, add a test in the same commit.
+- DB queries run against a real in-memory SQLite via `better-sqlite3` (test-only). The mock at [`tests/__mocks__/expo-sqlite.ts`](../tests/__mocks__/expo-sqlite.ts) implements `execAsync`, `runAsync`, `getAllAsync`, `getFirstAsync`, and `withTransactionAsync` against `better-sqlite3` so FK enforcement and `PRAGMA` behavior match production.
+- The file-system mock at [`tests/__mocks__/expo-file-system-legacy.ts`](../tests/__mocks__/expo-file-system-legacy.ts) is in-memory; backup tests can read what they wrote without touching disk.
+- Use [`tests/helpers/db.ts`](../tests/helpers/db.ts)'s `createTestDb()` in `beforeEach`. It calls `jest.resetModules()`, resets both mocks, and re-requires `client` / `queries` / `backup` / `rulesEngine` — so every test starts on a fresh, fully-migrated DB. Always call query functions through the returned modules, not via top-level imports (those would point at a stale singleton).
+- DB tests live under [`tests/db/`](../tests/db/); domain/parser tests stay where they are.
+- UI is exercised manually in Expo Go — there are no React Native render tests yet. (Adding them is a v4.3+ project.)
 
-**v4.0 test coverage added:**
+**Coverage map:**
 
-| File | What it covers |
+| Folder | What's covered |
 |---|---|
+| `tests/db/migrations.test.ts` | All 12 migrations apply cleanly; FKs are on; `applied_rule_id` has no FK (regression for v4.2.0). |
+| `tests/db/backup.test.ts` | Full export → import round-trip across all 8 tables; sidecar metadata; legacy fallback; v3 forward-compat. |
+| `tests/db/import-transactions.test.ts` | Bulk insert, idempotent re-import, pending→cleared, dropped-pending detection within the date-range window, chunked imports. |
+| `tests/db/rules.test.ts` | `applied_rule_id` contract; foundational counts; manual-skip; deleteRule clears the FK replacement; `autoApplyAllRules` parallel total. |
 | `tests/domain/foundational-rules.test.ts` | Shape of each `FoundationalRule`: valid id, non-empty conditions, valid logic, no funFact. Snapshot of IDs prevents silent drift. |
-| `tests/domain/rules-engine.test.ts` (extended) | **Ordering contract**: user rule always wins over foundational rule on the same transaction. Proof that array order matters. `byFoundational` count. Disabled and unmapped foundational rules excluded. |
+| `tests/domain/rules-engine.test.ts` | **Ordering contract**: user rule always wins over foundational rule on the same transaction. Proof that array order matters. `byFoundational` count. Disabled and unmapped foundational rules excluded. |
 | `tests/domain/emoji-suggestions.test.ts` | 22 cases: known mappings, case-insensitivity, multi-word names, batch function, null for unknown names. |
 
 ---
