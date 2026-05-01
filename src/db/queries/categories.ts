@@ -46,6 +46,59 @@ export async function deleteCategory(id: string): Promise<void> {
 }
 
 /**
+ * Merge sourceId into targetId.
+ *
+ * Everything owned by source is moved to target in a single atomic transaction:
+ *   - transactions  →  category_id reassigned
+ *   - rules         →  reassigned BEFORE delete (CASCADE would wipe them otherwise)
+ *   - foundational_rule_settings  →  reassigned BEFORE delete (SET NULL otherwise)
+ *   - budgets (spending goals)    →  summed per (account_id, month) into target
+ *   - source category             →  deleted (cascade cleans any remaining budget rows)
+ */
+export async function mergeCategory(sourceId: string, targetId: string): Promise<void> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    // 1. Reassign transactions
+    await db.runAsync(
+      `UPDATE transactions SET category_id = ? WHERE category_id = ?`,
+      targetId, sourceId,
+    );
+
+    // 2. Reassign rules (must precede delete to avoid CASCADE loss)
+    await db.runAsync(
+      `UPDATE rules SET category_id = ? WHERE category_id = ?`,
+      targetId, sourceId,
+    );
+
+    // 3. Reassign foundational_rule_settings (must precede delete; FK is SET NULL)
+    await db.runAsync(
+      `UPDATE foundational_rule_settings SET category_id = ? WHERE category_id = ?`,
+      targetId, sourceId,
+    );
+
+    // 4. Merge spending goals: for each (account_id, month) in source,
+    //    upsert into target = source.amount + COALESCE(target.amount, 0).
+    await db.runAsync(
+      `INSERT OR REPLACE INTO budgets (account_id, category_id, month, amount_cents)
+       SELECT b_src.account_id,
+              ? AS category_id,
+              b_src.month,
+              b_src.amount_cents + COALESCE(b_tgt.amount_cents, 0) AS amount_cents
+       FROM   budgets b_src
+       LEFT JOIN budgets b_tgt
+         ON  b_tgt.account_id  = b_src.account_id
+         AND b_tgt.category_id = ?
+         AND b_tgt.month       = b_src.month
+       WHERE  b_src.category_id = ?`,
+      targetId, targetId, sourceId,
+    );
+
+    // 5. Delete source category — CASCADE removes any remaining budget rows on source
+    await db.runAsync(`DELETE FROM categories WHERE id = ?`, sourceId);
+  });
+}
+
+/**
  * Bulk-insert categories in a single transaction. Used by the first-time
  * onboarding flow to seed the user's starter categories. Idempotent on (id) —
  * uses INSERT OR IGNORE so re-runs don't error.
