@@ -63,9 +63,15 @@ BudgetApp/
 │   │   └── category-colors.ts    # 8-swatch color palette
 │   ├── components/               # Reusable UI (SplashSlogan added v4.0)
 │   ├── parsers/
-│   │   ├── index.ts              # Parser entry point (registers formats)
+│   │   ├── index.ts              # Parser entry point — exports CSV + PDF parsers
 │   │   ├── generic-parser.ts     # CSV → ParsedRow[] using a ColumnConfig
-│   │   └── column-config.ts      # ColumnConfig type + DEFAULT_CONFIGS
+│   │   ├── column-config.ts      # ColumnConfig type + DEFAULT_CONFIGS
+│   │   └── pdf-parsers/
+│   │       ├── pdf-types.ts      # PdfTextItem, ParsedPdf, PdfSummary, SkippedCandidate
+│   │       ├── pdf-utils.ts      # groupByY, parseAmountCents, parseDateMmDdYy, etc.
+│   │       ├── boa-pdf-parser.ts # Bank of America checking (4-format variants verified)
+│   │       ├── citi-pdf-parser.ts# Citi credit card (old/mid/new format + 2 edge cases)
+│   │       └── generic-pdf-parser.ts # Heuristic fallback for unsupported banks
 │   └── theme.ts                  # colors / spacing / fonts / account chip colors
 ├── assets/                       # icons, splash, sloth illustrations, backdrop
 ├── tests/                        # Jest specs + expo module mocks
@@ -109,7 +115,8 @@ Expo Router maps the file tree directly to routes. `[id]` is a dynamic segment.
 | `/account/new` | `account/new.tsx` | Create-account form (name, type, CSV format, optional column override). |
 | `/account/[id]` | `account/[id]/index.tsx` | Transactions for one account. Filter by month/year/category. Bulk-select for batch categorization. Search. Undo banner after a manual categorization. Menu → edit / import / rules / budget. |
 | `/account/[id]/edit` | `account/[id]/edit.tsx` | Edit account metadata. Delete account (cascades). |
-| `/account/[id]/import` | `account/[id]/import.tsx` | Pick CSV → preview → import → show counts (inserted / cleared / dropped / skipped). |
+| `/account/[id]/import` | `account/[id]/import.tsx` | Pick CSV **or PDF statement** → preview → diff reconciliation card (PDF only) → import → show counts. PDF cleanup nudge on done screen. |
+| `/account/[id]/add` | `account/[id]/add.tsx` | Manual single-transaction entry form (date, amount, description). Accepts optional `prefillDate`, `prefillAmount`, `prefillDescription` params for pre-populating from the PDF diff reconciliation flow. Saves via `insertManualTransaction`, then auto-applies rules and writes backup. |
 | `/account/[id]/rules` | `account/[id]/rules.tsx` | List rules in priority order; drag to reorder; tap to edit; create with multi-condition support (AND/OR over text + amount conditions). |
 | `/account/[id]/budget` | `account/[id]/budget.tsx` | Annual budget grid: sticky months across, categories down. Cells editable; row & global actions (split annual total, fill from previous year, apply %, copy). Actuals overlay shows real spend per cell. |
 | `/category/new` | `category/new.tsx` | Create category (name + color + optional emoji + optional description). Exports `CATEGORY_EMOJIS` constant used by the emoji picker. |
@@ -153,6 +160,33 @@ Expo Router maps the file tree directly to routes. `[id]` is a dynamic segment.
 ---
 
 ## Key flows
+
+### PDF import + diff reconciliation (v4.7.0)
+
+Implemented in [`app/account/[id]/import.tsx`](../app/account/[id]/import.tsx) (PDF path) and `src/parsers/pdf-parsers/`.
+
+1. User taps **"Choose PDF Statement…"**. The native `PdfExtractorModule` (Swift PDFKit, `modules/pdf-extractor/`) extracts word-level `{page, x, y, text}` items.
+2. Parser routing by `account.csv_format`: `boa_checking_v1` → `parseBoaPdf`, `citi_cc_v1` → `parseCitiPdf`, `custom` → `parseGenericPdf`.
+3. Each parser returns `ParsedPdf { rows: GenericRow[], summary?: PdfSummary, skippedCandidates: SkippedCandidate[] }`. `PdfSummary` holds `expectedTotals` extracted from the statement's own Account Summary section and `diffCents` (0 = perfect match).
+4. **Diff reconciliation preview**: if `diffCents > 0` or there are `skippedCandidates`, an amber warning card shows the diff amount and each skipped line with an **"Add manually →"** CTA. Tapping pushes to `/account/[id]/add?prefillDate=…&prefillAmount=…&prefillDescription=…`.
+5. **Zero-diff**: a green "✓ All transactions matched" badge appears on the file header card.
+6. Confirm import runs the same `importTransactions` pipeline as the CSV flow.
+7. The cached PDF copy is deleted via `FileSystem.deleteAsync`. A nudge card prompts the user to delete the original from Files app.
+
+**Native module** (`modules/pdf-extractor/`): requires `npx expo prebuild && pod install`. Not available in Expo Go — the PDF button shows an informational alert if the native module is absent.
+
+**Sign conventions by parser**:
+- BoA: amounts kept as-is (deposits positive, subtractions negative in the PDF).
+- Citi: all amounts negated — purchases are positive in the PDF but become negative expenses in the app; payments (negative in PDF) become positive credits.
+- Generic: amounts kept as-is (heuristic, no summary comparison).
+
+### Manual transaction entry (v4.7.0)
+
+Screen: [`app/account/[id]/add.tsx`](../app/account/[id]/add.tsx)
+
+- Accessible from the **split FAB "+" button** on the account detail screen, the **"Add Manually" menu item**, or pushed programmatically from the PDF diff reconciliation flow with pre-filled params.
+- Calls `insertManualTransaction(accountId, dateIso, amountCents, description)` which creates a singleton `manual-{accountId}` batch via `INSERT OR IGNORE` (no schema migration needed). Transaction IDs are deterministic — re-entering the same (date, amount, description) triplet is silently deduplicated.
+- Post-save: `autoApplyRulesForAccount`, then `writeBackupSafe`, then `router.back()`.
 
 ### CSV import + transaction IDs
 

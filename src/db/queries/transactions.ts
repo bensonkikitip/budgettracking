@@ -200,6 +200,66 @@ export async function importTransactions(
   return { inserted, cleared, dropped, skipped, total: rows.length };
 }
 
+// --- Manual entry ---
+
+/**
+ * The singleton batch ID for manual transactions on a given account.
+ * Using INSERT OR IGNORE on this batch means no schema migration is needed:
+ * the first manual entry creates the batch, subsequent ones reuse it.
+ */
+export function manualBatchId(accountId: string): string {
+  return `manual-${accountId}`;
+}
+
+/**
+ * Insert a single manually-entered transaction.
+ *
+ * Uses a singleton "manual" import batch (INSERT OR IGNORE) so no schema
+ * migration is needed. The transaction ID is deterministic — re-inserting
+ * the exact same (date, amount, description) triplet for the same account
+ * is silently ignored (idempotent).
+ *
+ * @returns The new transaction's ID, or null if it was a duplicate.
+ */
+export async function insertManualTransaction(
+  accountId: string,
+  dateIso: string,
+  amountCents: number,
+  description: string,
+): Promise<string | null> {
+  const db = await getDb();
+  const batchId = manualBatchId(accountId);
+  const now = Date.now();
+
+  // Ensure the singleton manual batch exists
+  await db.runAsync(
+    `INSERT OR IGNORE INTO import_batches
+       (id, account_id, filename, imported_at, rows_total, rows_inserted,
+        rows_skipped_duplicate, rows_cleared, rows_dropped)
+     VALUES (?, ?, '(manual entries)', ?, 0, 0, 0, 0, 0)`,
+    batchId, accountId, now,
+  );
+
+  // Deterministic ID — same as CSV import pipeline
+  const { sha256 } = require('js-sha256') as typeof import('js-sha256');
+  const { normalizeDescription } = require('../../domain/normalize') as typeof import('../../domain/normalize');
+  const normalised = normalizeDescription(description);
+  const baseKey = sha256(`${accountId}|${dateIso}|${amountCents}|${normalised}`);
+  const txId = sha256(`${baseKey}|0`).slice(0, 32);
+
+  const result = await db.runAsync(
+    `INSERT OR IGNORE INTO transactions
+       (id, account_id, date, amount_cents, description, original_description,
+        is_pending, dropped_at, import_batch_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
+    txId, accountId, dateIso, amountCents,
+    normalised, description,
+    batchId, now,
+  );
+
+  return (result.changes ?? 0) > 0 ? txId : null;
+}
+
 // --- Listing ---
 
 export async function getTransactions(accountId: string): Promise<Transaction[]> {

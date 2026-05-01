@@ -45,7 +45,9 @@ A user's bank account (checking or credit card).
 ---
 
 ### `import_batches`
-Metadata about one CSV import.
+Metadata about one CSV or PDF import.
+
+**Manual-entry singleton**: Manual transactions (entered via the Add screen) use a singleton batch with `id = 'manual-{accountId}'`. It is created on first manual entry via `INSERT OR IGNORE` — no schema migration is needed. `filename` is set to `'(manual entries)'`. `rows_total`, `rows_inserted`, etc. remain 0 (counts are not tracked for manual batches).
 
 | Column | Type | Notes |
 |---|---|---|
