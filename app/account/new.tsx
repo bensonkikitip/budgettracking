@@ -18,6 +18,7 @@ import { parseCsv } from '../../src/parsers';
 import { assignTransactionIds } from '../../src/domain/transaction-id';
 import { autoApplyRulesForAccount } from '../../src/domain/rules-engine';
 import { ColumnMappingForm } from '../../src/components/ColumnMappingForm';
+import { CsvBrowserTip } from '../../src/components/CsvBrowserTip';
 import { centsToDollars } from '../../src/domain/money';
 import { writeBackupSafe } from '../../src/db/backup';
 import { colors, font, spacing, radius, accountColor } from '../../src/theme';
@@ -234,6 +235,8 @@ export default function AddAccountScreen() {
 
       {/* ── CSV Setup ── */}
       <Text style={styles.sectionLabel}>CSV COLUMN SETUP</Text>
+
+      <CsvBrowserTip />
 
       <TouchableOpacity
         style={[styles.csvPickButton, { borderColor: accentColor }, detecting && styles.disabled]}
