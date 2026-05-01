@@ -30,7 +30,7 @@ const BANKS: BankGuide[] = [
     name: 'Chase',
     icon: '🏛️',
     steps: [
-      { text: 'Log in to chase.com and go to your checking or credit card account.' },
+      { text: 'Open Safari (not the Chase app) and log in to chase.com — go to your checking or credit card account.' },
       { text: 'Click the "Download" icon (arrow pointing down) near the top of the transaction list.' },
       { text: 'In the popup, choose date range "Custom" and set the start and end dates you want.' },
       { text: 'Under "File type," select "CSV" (not PDF or OFX).' },
@@ -41,7 +41,7 @@ const BANKS: BankGuide[] = [
     name: 'Bank of America',
     icon: '🏦',
     steps: [
-      { text: 'Log in to bankofamerica.com and open your account.' },
+      { text: 'Open Safari (not the Bank of America app) and log in to bankofamerica.com — open your account.' },
       { text: 'Click the "Download" link just above the transaction list on the right side.' },
       { text: 'Choose a date range (up to 18 months at a time).' },
       { text: 'Under "File format," choose "Microsoft Excel format (.csv)".' },
@@ -52,7 +52,7 @@ const BANKS: BankGuide[] = [
     name: 'Wells Fargo',
     icon: '🐎',
     steps: [
-      { text: 'Log in to wellsfargo.com and click on your account.' },
+      { text: 'Open Safari (not the Wells Fargo app) and log in to wellsfargo.com — click on your account.' },
       { text: 'Click "Download Account Activity" below the account summary.' },
       { text: 'Choose a date range — you can go back up to 2 years.' },
       { text: 'Set the format to "Comma-Delimited File (.csv)".' },
@@ -63,7 +63,7 @@ const BANKS: BankGuide[] = [
     name: 'Citi',
     icon: '🌆',
     steps: [
-      { text: 'Log in to citi.com and open your credit card account.' },
+      { text: 'Open Safari (not the Citi app) and log in to citi.com — open your credit card account.' },
       { text: 'Go to "Account" → "Statements & Documents" → "Transactions."' },
       { text: 'Select the date range using the dropdown (up to 24 months back).' },
       { text: 'Click "Download" and choose "CSV — Spreadsheet" from the format list.' },
@@ -74,7 +74,7 @@ const BANKS: BankGuide[] = [
     name: 'Capital One',
     icon: '💰',
     steps: [
-      { text: 'Log in to capitalone.com and open your account.' },
+      { text: 'Open Safari (not the Capital One app) and log in to capitalone.com — open your account.' },
       { text: 'Click on "View Transactions" to see the full list.' },
       { text: 'Click the "Download" button above the transaction list.' },
       { text: 'Choose your date range (up to 3 years for most accounts).' },
@@ -85,7 +85,7 @@ const BANKS: BankGuide[] = [
     name: 'American Express',
     icon: '💎',
     steps: [
-      { text: 'Log in to americanexpress.com and go to your card account.' },
+      { text: 'Open Safari (not the Amex app) and log in to americanexpress.com — go to your card account.' },
       { text: 'Click "Statements & Activity" in the navigation.' },
       { text: 'Scroll down to the transaction list and click "Download" (top right of the list).' },
       { text: 'Under "File type," choose "CSV" and set your date range.' },
@@ -131,7 +131,7 @@ export default function CsvGuideScreen() {
               Take your time — I'll be right here when you get back.
             </Text>
             <Text style={styles.heroSub}>
-              Pick your bank below for step-by-step instructions on downloading a CSV file.
+              On your phone? Use Safari (not the banking app) and follow the steps for your bank.
             </Text>
           </View>
 

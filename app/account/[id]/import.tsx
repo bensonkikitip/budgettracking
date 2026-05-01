@@ -20,6 +20,7 @@ import { assignTransactionIds } from '../../../src/domain/transaction-id';
 import { centsToDollars } from '../../../src/domain/money';
 import { Sloth } from '../../../src/components/Sloth';
 import { RacheyBanner } from '../../../src/components/RacheyBanner';
+import { CsvBrowserTip } from '../../../src/components/CsvBrowserTip';
 import { colors, font, spacing, radius, accountColor } from '../../../src/theme';
 
 type Phase = 'pick' | 'preview' | 'done';
@@ -163,6 +164,7 @@ export default function ImportScreen() {
             <Text style={styles.pickBody}>
               Hand me a CSV from your bank and I'll show you a preview before saving anything.
             </Text>
+            <CsvBrowserTip />
             <Link href="/csv-guide" style={styles.csvGuideLink}>
               How do I export a CSV from my bank? →
             </Link>
