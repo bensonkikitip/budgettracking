@@ -166,11 +166,11 @@ export default function TrendsScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Trends</Text>
-        <View style={styles.backBtn} /> {/* spacer */}
+        <View style={styles.backBtn} />
       </View>
 
       {/* Comparison mode selector */}
