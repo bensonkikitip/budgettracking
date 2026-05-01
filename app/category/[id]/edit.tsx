@@ -166,6 +166,14 @@ export default function EditCategoryScreen() {
         >
           <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.mergeBtn}
+          onPress={() => router.push(`/category/${id}/merge`)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.mergeBtnText}>Merge into another category →</Text>
+        </TouchableOpacity>
       </ScrollView>
     </>
   );
@@ -218,4 +226,19 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.4 },
   saveBtnText: { fontFamily: font.bold, fontSize: 16, color: colors.textOnColor },
+
+  mergeBtn: {
+    marginTop: spacing.md,
+    borderRadius: radius.full,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  mergeBtnText: {
+    fontFamily: font.semiBold,
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
 });

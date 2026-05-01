@@ -43,7 +43,9 @@ BudgetApp/
 │   │       └── budget.tsx        # Annual budget grid (12 months × categories)
 │   └── category/
 │       ├── new.tsx               # Create category (name + color + emoji + description)
-│       └── [id]/edit.tsx         # Edit category (name + color + emoji + description)
+│       └── [id]/
+│           ├── edit.tsx          # Edit category (name + color + emoji + description)
+│           └── merge.tsx         # Pick a target and merge source → target (atomic)
 ├── src/
 │   ├── db/
 │   │   ├── client.ts             # SQLite open + migrations (LATEST_DB_VERSION)
@@ -111,7 +113,8 @@ Expo Router maps the file tree directly to routes. `[id]` is a dynamic segment.
 | `/account/[id]/rules` | `account/[id]/rules.tsx` | List rules in priority order; drag to reorder; tap to edit; create with multi-condition support (AND/OR over text + amount conditions). |
 | `/account/[id]/budget` | `account/[id]/budget.tsx` | Annual budget grid: sticky months across, categories down. Cells editable; row & global actions (split annual total, fill from previous year, apply %, copy). Actuals overlay shows real spend per cell. |
 | `/category/new` | `category/new.tsx` | Create category (name + color + optional emoji + optional description). Exports `CATEGORY_EMOJIS` constant used by the emoji picker. |
-| `/category/[id]/edit` | `category/[id]/edit.tsx` | Edit category (name + color + emoji + description). |
+| `/category/[id]/edit` | `category/[id]/edit.tsx` | Edit category (name + color + emoji + description). "Merge into another category →" secondary button pushes to the merge screen. |
+| `/category/[id]/merge` | `category/[id]/merge.tsx` | List of all other categories; tap to confirm and execute a merge. Calls `mergeCategory(sourceId, targetId)` then replaces to `/`. |
 | `/welcome-v4` | `welcome-v4.tsx` | Modal. Shown once to existing users after upgrading from v3.x (checked via `app_preferences.v4_welcomed`). Rachey waving. Lists 3 new v4.0 features. Two CTAs: emoji suggest or dismiss. Writes `v4_welcomed = "true"` and never shows again. |
 | `/welcome-v4-emoji-suggest` | `welcome-v4-emoji-suggest.tsx` | Modal. Loads all categories + emoji suggestions; user reviews/overrides per row; saves changed emojis in one pass. Skippable. |
 | `/onboarding/intro` | `onboarding/intro.tsx` | First-time user landing screen. Rachey waving + slogan + 1 CTA → categories step. Triggered by `app/index.tsx` when zero accounts AND zero categories AND `intro_completed` not set. |
