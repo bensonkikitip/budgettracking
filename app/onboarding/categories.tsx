@@ -81,7 +81,13 @@ export default function OnboardingCategoriesScreen() {
         };
       });
       await bulkInsertCategories(toInsert);
-      await setPreference('intro_completed', 'true');
+      // Mark onboarding complete. Also mark v4_welcomed so new users who start
+      // fresh in v4 never see the "I learned some new tricks" upgrade sheet —
+      // that sheet is intended for v3→v4 upgraders who had the app before v4.
+      await Promise.all([
+        setPreference('intro_completed', 'true'),
+        setPreference('v4_welcomed', '1'),
+      ]);
       router.replace('/account/new');
     } catch (e: any) {
       Alert.alert('Could not save', e.message ?? 'Something went wrong.');

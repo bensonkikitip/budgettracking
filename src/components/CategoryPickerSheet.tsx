@@ -103,6 +103,7 @@ export function CategoryPickerSheet({
                     style={[styles.row, styles.rowBorder, isSelected && styles.rowSelected]}
                     onPress={() => onSelect(item.id)}
                     activeOpacity={0.7}
+                    accessibilityLabel={item.name}
                   >
                     <View style={[styles.swatch, { backgroundColor: item.color }]}>
                       {item.emoji ? <Text style={styles.swatchEmoji}>{item.emoji}</Text> : null}

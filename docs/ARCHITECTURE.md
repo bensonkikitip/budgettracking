@@ -63,9 +63,19 @@ BudgetApp/
 │   │   └── category-colors.ts    # 8-swatch color palette
 │   ├── components/               # Reusable UI (SplashSlogan added v4.0)
 │   ├── parsers/
-│   │   ├── index.ts              # Parser entry point (registers formats)
+│   │   ├── index.ts              # Parser entry point — exports CSV + PDF parsers
 │   │   ├── generic-parser.ts     # CSV → ParsedRow[] using a ColumnConfig
-│   │   └── column-config.ts      # ColumnConfig type + DEFAULT_CONFIGS
+│   │   ├── column-config.ts      # ColumnConfig type + DEFAULT_CONFIGS
+│   │   ├── bank-formats.ts       # CSV_FORMATS list (BankFormatEntry[]) — shared by new/edit screens
+│   │   └── pdf-parsers/
+│   │       ├── pdf-types.ts      # PdfTextItem, ParsedPdf, PdfSummary, SkippedCandidate
+│   │       ├── pdf-utils.ts      # groupByY, parseAmountCents, parseDateMmDdYy, etc.
+│   │       ├── boa-pdf-parser.ts # Bank of America checking/savings (4-format variants verified)
+│   │       ├── boa-cc-pdf-parser.ts  # BoA BankAmericard CC (two-date-column, ref/acct noise strip)
+│   │       ├── citi-pdf-parser.ts    # Citi credit card (old/mid/new format + 2 edge cases)
+│   │       ├── axos-pdf-parser.ts    # Axos checking/savings (Credits/Debits two-column layout)
+│   │       ├── chase-pdf-parser.ts   # Chase Freedom CC (doubled-char noise filter, ACCOUNT ACTIVITY)
+│   │       └── generic-pdf-parser.ts # Heuristic fallback for unsupported banks
 │   └── theme.ts                  # colors / spacing / fonts / account chip colors
 ├── assets/                       # icons, splash, sloth illustrations, backdrop
 ├── tests/                        # Jest specs + expo module mocks
@@ -106,10 +116,11 @@ Expo Router maps the file tree directly to routes. `[id]` is a dynamic segment.
 | `/all` | `all.tsx` | All transactions across every account, with the same month/year/category filtering as account detail. |
 | `/backup` | `backup.tsx` | Backup status (last saved, counts), export (share sheet → Files / AirDrop), import (document picker → restore). |
 | `/categories` | `categories.tsx` | List of categories with color swatches; tap to edit; FAB to create. |
-| `/account/new` | `account/new.tsx` | Create-account form (name, type, CSV format, optional column override). |
+| `/account/new` | `account/new.tsx` | Create-account form (name, type, CSV format, optional column override). Also offers a **"Skip CSV — I'll import a statement →"** path: user selects a bank format and skips CSV column setup entirely. Saves the account and navigates straight to `import.tsx?fromOnboarding=1`. |
 | `/account/[id]` | `account/[id]/index.tsx` | Transactions for one account. Filter by month/year/category. Bulk-select for batch categorization. Search. Undo banner after a manual categorization. Menu → edit / import / rules / budget. |
 | `/account/[id]/edit` | `account/[id]/edit.tsx` | Edit account metadata. Delete account (cascades). |
-| `/account/[id]/import` | `account/[id]/import.tsx` | Pick CSV → preview → import → show counts (inserted / cleared / dropped / skipped). |
+| `/account/[id]/import` | `account/[id]/import.tsx` | Pick CSV **or PDF statement** → preview → diff reconciliation card (PDF only) → import → show counts. PDF cleanup nudge on done screen. Accepts `fromOnboarding=1` param: changes the done-phase CTA from "Back to Account" to "Set up rules →" which navigates to `/account/[id]?showFoundationalOnboarding=1`. |
+| `/account/[id]/add` | `account/[id]/add.tsx` | Manual single-transaction entry form (date, amount, description). Accepts optional `prefillDate`, `prefillAmount`, `prefillDescription` params for pre-populating from the PDF diff reconciliation flow. Saves via `insertManualTransaction`, then auto-applies rules and writes backup. |
 | `/account/[id]/rules` | `account/[id]/rules.tsx` | List rules in priority order; drag to reorder; tap to edit; create with multi-condition support (AND/OR over text + amount conditions). |
 | `/account/[id]/budget` | `account/[id]/budget.tsx` | Annual budget grid: sticky months across, categories down. Cells editable; row & global actions (split annual total, fill from previous year, apply %, copy). Actuals overlay shows real spend per cell. |
 | `/category/new` | `category/new.tsx` | Create category (name + color + optional emoji + optional description). Exports `CATEGORY_EMOJIS` constant used by the emoji picker. |
@@ -153,6 +164,44 @@ Expo Router maps the file tree directly to routes. `[id]` is a dynamic segment.
 ---
 
 ## Key flows
+
+### PDF import + diff reconciliation (v4.7.0 / extended v4.8.0)
+
+Implemented in [`app/account/[id]/import.tsx`](../app/account/[id]/import.tsx) (PDF path) and `src/parsers/pdf-parsers/`.
+
+1. User taps **"Choose PDF Statement…"**. The native `PdfExtractorModule` (Swift PDFKit, `modules/pdf-extractor/`) extracts word-level `{page, x, y, text}` items. **Coordinate convention**: `y = 0` is the bottom of the page; large `y` values are near the top. `groupByY` sorts items descending (`b.y - a.y`) so top-of-page items (section headers) are processed first.
+2. Parser routing by `account.csv_format`:
+   - `boa_checking_v1` / `boa_savings_v1` → `parseBoaPdf`
+   - `citi_cc_v1` → `parseCitiPdf`
+   - `boa_cc_v1` → `parseBoaCcPdf`
+   - `axos_checking_v1` / `axos_savings_v1` → `parseAxosPdf`
+   - `chase_cc_v1` → `parseChasePdf`
+   - `custom` / fallback → `parseGenericPdf`
+3. Each parser returns `ParsedPdf { rows: GenericRow[], summary?: PdfSummary, skippedCandidates: SkippedCandidate[] }`. `PdfSummary` holds `expectedTotals` extracted from the statement's own Account Summary section and `diffCents` (0 = perfect match).
+4. **Diff reconciliation preview**: if `diffCents > 0` or there are `skippedCandidates`, an amber warning card shows the diff amount and each skipped line with an **"Add manually →"** CTA. Tapping pushes to `/account/[id]/add?prefillDate=…&prefillAmount=…&prefillDescription=…`.
+5. **Zero-diff**: a green "✓ All transactions matched" badge appears on the file header card.
+6. Confirm import runs the same `importTransactions` pipeline as the CSV flow.
+7. The cached PDF copy is deleted via `FileSystem.deleteAsync`. A nudge card prompts the user to delete the original from Files app.
+
+**Native module** (`modules/pdf-extractor/`): requires `npx expo prebuild && pod install`. Not available in Expo Go — the PDF button shows an informational alert if the native module is absent.
+
+**Sign conventions by parser**:
+- BoA checking/savings: amounts kept as-is (deposits positive, withdrawals negative in the PDF).
+- BoA CC: all amounts negated — purchases are positive in PDF → negative expenses in app; payments are negative in PDF → positive credits.
+- Citi CC: all amounts negated (same as BoA CC).
+- Axos: Credits column (x≥480 && x≤535) → positive (income); Debits column (x≥540) → negated (expense).
+- Chase CC: all amounts negated — purchases are positive in PDF → negative expenses; payments are negative in PDF → positive credits.
+- Generic: amounts kept as-is (heuristic, no summary comparison).
+
+**Onboarding import path (v4.8.0)**: `import.tsx` accepts a `fromOnboarding=1` URL param. When set, the pick-phase shows a "Skip & set up rules →" ghost button and the done-phase CTA becomes "Set up rules →" which navigates to `/account/${accountId}?showFoundationalOnboarding=1` instead of going back.
+
+### Manual transaction entry (v4.7.0)
+
+Screen: [`app/account/[id]/add.tsx`](../app/account/[id]/add.tsx)
+
+- Accessible from the **split FAB "+" button** on the account detail screen, the **"Add Manually" menu item**, or pushed programmatically from the PDF diff reconciliation flow with pre-filled params.
+- Calls `insertManualTransaction(accountId, dateIso, amountCents, description)` which creates a singleton `manual-{accountId}` batch via `INSERT OR IGNORE` (no schema migration needed). Transaction IDs are deterministic — re-entering the same (date, amount, description) triplet is silently deduplicated.
+- Post-save: `autoApplyRulesForAccount`, then `writeBackupSafe`, then `router.back()`.
 
 ### CSV import + transaction IDs
 
@@ -276,10 +325,17 @@ Implemented in [`app/onboarding/`](../app/onboarding/) (4 screens) plus trigger 
 
 ```
 home (empty) → /onboarding/intro → /onboarding/categories
-  → /account/new → /account/[id] (after inline import)
-    → /onboarding/foundational-rules?accountId=X&first=1
-      → accept: apply rules → /onboarding/done → /account/[id]
-      → skip: enabled=0 rows written → /account/[id]
+  → /account/new
+      ├─ CSV path: pick CSV file → /account/[id] (after inline import)
+      │      → /onboarding/foundational-rules?accountId=X&first=1
+      │            → accept: apply rules → /onboarding/done → /account/[id]
+      │            → skip: enabled=0 rows written → /account/[id]
+      └─ Statement path: select bank format → "Skip CSV — I'll import a statement →"
+             → /account/[id]/import?fromOnboarding=1
+                   → import PDF/CSV statement → "Set up rules →"
+                   → /account/[id]?showFoundationalOnboarding=1
+                   → /onboarding/foundational-rules?accountId=X&first=1
+                         → accept / skip → same as CSV path above
 ```
 
 **Flow B — adding 2nd, 3rd, n+1 account:**

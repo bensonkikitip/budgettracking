@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, LogBox } from 'react-native';
 import { Stack, ErrorBoundaryProps, useRouter } from 'expo-router';
+
+// Suppress the orange "Open debugger to view warnings" overlay in development
+// builds. This overlay sits at the bottom of the screen and intercepts taps
+// on full-width CTAs, breaking Maestro E2E flows. Warnings still appear in the
+// Metro console — this only hides the in-app visual overlay.
+if (__DEV__) {
+  LogBox.ignoreAllLogs();
+}
 import * as SplashScreen from 'expo-splash-screen';
 import {
   useFonts,

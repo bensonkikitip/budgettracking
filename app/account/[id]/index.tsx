@@ -460,6 +460,10 @@ export default function AccountDetailScreen() {
           <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBulkMode(true); }}>
             <Text style={styles.menuItemText}>Bulk Categorize</Text>
           </TouchableOpacity>
+          <View style={styles.menuDivider} />
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); router.push(`/account/${id}/add`); }}>
+            <Text style={styles.menuItemText}>Add Manually</Text>
+          </TouchableOpacity>
         </View>
       </Modal>
 
@@ -621,13 +625,23 @@ export default function AccountDetailScreen() {
                 </Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={[styles.importFab, { bottom: insets.bottom + spacing.lg, backgroundColor: accent }]}
-                onPress={() => router.push(`/account/${id}/import`)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.importFabText}>Import CSV</Text>
-              </TouchableOpacity>
+              /* Split FAB: Import (left) + Add manually (right "+") */
+              <View style={[styles.splitFab, { bottom: insets.bottom + spacing.lg }]}>
+                <TouchableOpacity
+                  style={[styles.splitFabMain, { backgroundColor: accent }]}
+                  onPress={() => router.push(`/account/${id}/import`)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.importFabText}>Import</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.splitFabPlus, { backgroundColor: accent }]}
+                  onPress={() => router.push(`/account/${id}/add`)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.splitFabPlusText}>+</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </>
         )}
@@ -853,4 +867,21 @@ const styles = StyleSheet.create({
   },
   importFabText: { fontFamily: font.bold, fontSize: 17, color: colors.textOnColor },
   fabDisabled:   { opacity: 0.45 },
+
+  // Split FAB: Import (wide) + "+" (square pill) side by side
+  splitFab: {
+    position: 'absolute', left: spacing.lg, right: spacing.lg,
+    flexDirection: 'row', gap: spacing.sm,
+    shadowColor: '#2C2416', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
+  },
+  splitFabMain: {
+    flex: 1, borderRadius: radius.full,
+    paddingVertical: 16, alignItems: 'center',
+  },
+  splitFabPlus: {
+    width: 54, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  splitFabPlusText: { fontFamily: font.bold, fontSize: 26, color: colors.textOnColor, lineHeight: 30 },
 });

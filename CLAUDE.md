@@ -25,13 +25,15 @@ Run before every release. Pre-flight steps are non-negotiable.
 6. **Run Maestro E2E flows** (simulator must be running with the app open):
    ```
    maestro test maestro/onboarding_new_user.yaml
+   maestro test maestro/onboarding_skip_import.yaml
    maestro test maestro/import_flow.yaml
    maestro test maestro/categorize.yaml
    maestro test maestro/rule_apply.yaml
    maestro test maestro/backup_restore.yaml
    maestro test maestro/period_nav.yaml
    ```
-   All 6 flows must pass. Install Maestro once with `brew install maestro` (requires Maestro ≥ 1.38 for iOS file picker support).
+   All 7 flows must pass. Install Maestro via `curl -Ls "https://get.maestro.mobile.dev" | bash` (current tested version: 2.5.0).
+   Note: Maestro cannot drive the iOS document picker for arbitrary file types. The import flows use dev-only "Load … .csv" buttons that appear only in `__DEV__` builds and feed fixture data through the real parse pipeline — no real file picker interaction needed in tests.
 
 ### Update docs (mandatory when applicable)
 5. **Update `docs/SCHEMA.md`** if any DB change was made:

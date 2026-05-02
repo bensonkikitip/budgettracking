@@ -1,0 +1,6 @@
+{
+  "name": "pdf-extractor",
+  "version": "1.0.0",
+  "description": "Native iOS PDFKit word-level text extraction for BudgetApp",
+  "main": "index.ts"
+}

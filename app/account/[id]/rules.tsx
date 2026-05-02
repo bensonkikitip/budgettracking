@@ -466,7 +466,9 @@ export default function AccountRulesScreen() {
           )}
           renderItem={({ item, index }) => (
             <View style={[styles.ruleRow, index > 0 && styles.rowBorder]}>
-              <TouchableOpacity style={styles.ruleInfo} onPress={() => openEditSheet(item)} activeOpacity={0.6}>
+              <TouchableOpacity style={styles.ruleInfo} onPress={() => openEditSheet(item)} activeOpacity={0.6}
+                accessibilityLabel={`${ALL_MATCH_TYPES.find(m => m.value === (item.conditions?.[0]?.match_type ?? item.match_type))?.label ?? item.match_type} "${item.conditions?.[0]?.match_text ?? item.match_text}" → ${item.categoryName}`}
+              >
                 {(item.conditions.length > 0 ? item.conditions : [{ match_type: item.match_type, match_text: item.match_text }])
                   .map((c, ci) => {
                     const { typeLabel, valueLabel } = ruleMatchSummary(c);
@@ -704,8 +706,10 @@ export default function AccountRulesScreen() {
             {/* TouchableWithoutFeedback collapses the category picker when the user
                 taps any non-interactive area of the form (labels, spacing, etc.).
                 Child TouchableOpacity elements handle their own presses and prevent
-                this from firing — so buttons and list rows are unaffected. */}
-            <TouchableWithoutFeedback onPress={() => setCatView('collapsed')}>
+                this from firing — so buttons and list rows are unaffected.
+                accessible={false} prevents the child View from becoming a single
+                accessibility element (which would hide children from Maestro/VoiceOver). */}
+            <TouchableWithoutFeedback onPress={() => setCatView('collapsed')} accessible={false}>
               <View>
 
             <Text style={styles.sheetTitle}>{editingRuleId ? 'Edit Rule' : 'Add Rule'}</Text>
@@ -796,6 +800,11 @@ export default function AccountRulesScreen() {
                         onChangeText={t => updateCondition(idx, { match_text: t })}
                         placeholder="e.g. whole foods"
                         placeholderTextColor={colors.textTertiary}
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        returnKeyType="done"
+                        accessibilityLabel="Text to match"
                       />
                     </>
                   )}
@@ -827,6 +836,7 @@ export default function AccountRulesScreen() {
                 style={styles.catDropdownHeader}
                 onPress={() => setCatView(catView === 'list' ? 'collapsed' : 'list')}
                 activeOpacity={0.7}
+                accessibilityLabel="Select category"
               >
                 {selectedCat ? (
                   <View style={[styles.catRowDot, { backgroundColor: selectedCat.color }]}>
@@ -854,6 +864,7 @@ export default function AccountRulesScreen() {
                         style={[styles.catDropdownRow, styles.catRowBorder, isSelected && styles.catRowSelected]}
                         onPress={() => selectCategory(item.id)}
                         activeOpacity={0.7}
+                        accessibilityLabel={item.name}
                       >
                         <View style={[styles.catRowDot, { backgroundColor: item.color }]}>
                           {item.emoji
@@ -933,6 +944,7 @@ export default function AccountRulesScreen() {
                 onPress={handleSaveRule}
                 disabled={!categoryId || saving || conditions.some(c => !c.match_text.trim() || (isAmountType(c.match_type) && isNaN(parseFloat(c.match_text))))}
                 activeOpacity={0.85}
+                accessibilityLabel="Save rule"
               >
                 <Text style={styles.saveBtnText}>
                   {saving ? 'Saving…' : editingRuleId ? 'Save Changes' : 'Add Rule'}

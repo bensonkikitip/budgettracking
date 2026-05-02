@@ -35,7 +35,7 @@ A user's bank account (checking or credit card).
 | `id` | `TEXT PRIMARY KEY` | Random ID. |
 | `name` | `TEXT NOT NULL` | User-facing label. |
 | `type` | `TEXT NOT NULL` | `CHECK IN ('checking', 'credit_card')`. |
-| `csv_format` | `TEXT NOT NULL` | `'boa_checking_v1'` \| `'citi_cc_v1'`. Determines default `column_config`. |
+| `csv_format` | `TEXT NOT NULL` | `'boa_checking_v1'` \| `'boa_savings_v1'` \| `'boa_cc_v1'` \| `'citi_cc_v1'` \| `'axos_checking_v1'` \| `'axos_savings_v1'` \| `'chase_cc_v1'` \| `'custom'`. Determines which PDF parser (or CSV column config) is used on import. |
 | `column_config` | `TEXT` | JSON `ColumnConfig` (see below). Nullable for v1 accounts; backfilled in migration v3. |
 | `created_at` | `INTEGER NOT NULL` | ms timestamp. |
 | `suggest_rules` | `INTEGER NOT NULL DEFAULT 1` | 1 = show rule-suggestion banner after manual categorization; 0 = show plain undo banner. |
@@ -45,7 +45,9 @@ A user's bank account (checking or credit card).
 ---
 
 ### `import_batches`
-Metadata about one CSV import.
+Metadata about one CSV or PDF import.
+
+**Manual-entry singleton**: Manual transactions (entered via the Add screen) use a singleton batch with `id = 'manual-{accountId}'`. It is created on first manual entry via `INSERT OR IGNORE` — no schema migration is needed. `filename` is set to `'(manual entries)'`. `rows_total`, `rows_inserted`, etc. remain 0 (counts are not tracked for manual batches).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -189,7 +191,11 @@ Defined in [`src/db/queries.ts`](../src/db/queries.ts) (and `Budget` near the bo
 
 ```ts
 type AccountType = 'checking' | 'credit_card';
-type CsvFormat   = 'boa_checking_v1' | 'citi_cc_v1';
+type CsvFormat   = 'boa_checking_v1' | 'boa_savings_v1' | 'boa_cc_v1'
+                 | 'citi_cc_v1'
+                 | 'axos_checking_v1' | 'axos_savings_v1'
+                 | 'chase_cc_v1'
+                 | 'custom';
 type MatchType   = 'contains' | 'starts_with' | 'ends_with' | 'equals'
                  | 'amount_eq' | 'amount_lt' | 'amount_gt';
 

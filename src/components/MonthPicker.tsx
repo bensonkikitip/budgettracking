@@ -63,7 +63,7 @@ export function MonthPicker({
   return (
     <>
       {/* Pill button */}
-      <TouchableOpacity style={styles.pill} onPress={handleOpen} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.pill} onPress={handleOpen} activeOpacity={0.75} accessibilityLabel={pillLabel}>
         <Text style={styles.pillText}>{pillLabel}</Text>
         <Text style={styles.chevron}>▾</Text>
       </TouchableOpacity>
@@ -119,6 +119,7 @@ export function MonthPicker({
                     ]}
                     onPress={() => handleSelectMonth(item.key)}
                     activeOpacity={0.7}
+                    accessibilityLabel={item.label}
                   >
                     <Text style={[styles.rowLabel, isEmpty && styles.rowLabelEmpty]}>
                       {item.label}

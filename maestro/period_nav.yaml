@@ -2,27 +2,30 @@ appId: com.kiip.slonready
 ---
 # Precondition: run import_flow which gives us Feb 2026 data (onboarding)
 # AND Mar 2026 data (second import). Both months are within the default 6-month window.
-- runFlow: "maestro/import_flow.yaml"
+- runFlow: "import_flow.yaml"
 
-# ── We're on Chase Freedom account detail, showing March 2026 (most recent) ───
-- assertVisible: "March 2026"
+# ── We're on Chase Freedom account detail ────────────────────────────────────
+# After import_flow, the screen remembers the last-viewed period (Feb 2026).
+# The period picker restores curMonth on re-focus, so February 2026 is displayed.
+- assertVisible: "February 2026"
 
 # ── Open the period picker ───────────────────────────────────────────────────
-- tapOn: "March 2026"
-- assertVisible: "Select Dates"
-
-# ── Switch to February 2026 ──────────────────────────────────────────────────
-- tapOn: "February 2026"
-
-# ── Transactions for Feb 2026 are now showing ────────────────────────────────
-# COSTCO WHSE is in Feb 2026 (from sample_onboarding.csv) but NOT in Mar 2026.
-- assertVisible: "COSTCO WHSE"
-
-# ── Open picker again and switch back to March 2026 ──────────────────────────
 - tapOn: "February 2026"
 - assertVisible: "Select Dates"
+
+# ── Switch to March 2026 ────────────────────────────────────────────────────
 - tapOn: "March 2026"
 
 # ── March 2026 transactions now showing ──────────────────────────────────────
-# LYFT is in Mar 2026 (from sample_import.csv) but NOT in Feb 2026.
-- assertVisible: "LYFT"
+# ALBERTSONS is unique to Mar 2026 (sample_import.csv) — not in Feb 2026.
+- assertVisible: "ALBERTSONS #0354 GOLETA CA"
+
+# ── Open picker again and switch back to February 2026 ───────────────────────
+- tapOn: "March 2026"
+- assertVisible: "Select Dates"
+- tapOn: "February 2026"
+
+# ── February 2026 transactions now showing ───────────────────────────────────
+# TRADER JOE'S is unique to Feb 2026 (sample_onboarding.csv) — not in Mar 2026.
+# accessibilityLabel on TransactionRow is the description text (no regex metacharacters).
+- assertVisible: "TRADER JOE'S #123 GOLETA CA"

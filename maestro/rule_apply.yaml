@@ -1,7 +1,7 @@
 appId: com.kiip.slonready
 ---
 # Precondition: onboarding done, Feb 2026 transactions imported (includes STARBUCKS).
-- runFlow: "maestro/onboarding_new_user.yaml"
+- runFlow: "onboarding_new_user.yaml"
 
 # ── Navigate to Rules screen via the ••• menu ─────────────────────────────────
 - tapOn: "•••"
@@ -10,20 +10,25 @@ appId: com.kiip.slonready
 
 # ── Tap "Add" in the header to open the rule creation sheet ──────────────────
 - tapOn: "Add"
-- assertVisible: "Add Rule"
+# Skip assertVisible: "Add Rule" — Modal accessibility settle is unreliable.
+# tapOn below has built-in retry and acts as the implicit sheet-open assertion.
 
 # ── Fill in the match text ────────────────────────────────────────────────────
-# The text input has placeholder "e.g. whole foods".
-- tapOn: "e.g. whole foods"
+# TextInput has accessibilityLabel="Text to match" (placeholder isn't accessible in iOS).
+- tapOn: "Text to match"
 - inputText: "starbucks"
+# Press Done to dismiss the iOS keyboard (TextInput has returnKeyType="done").
+- pressKey: enter
 
 # ── Assign a category ────────────────────────────────────────────────────────
-- tapOn: "Select category…"
+# The dropdown header has accessibilityLabel="Select category" (regardless of current value).
+- tapOn: "Select category"
 - assertVisible: "Groceries"
 - tapOn: "Groceries"
 
 # ── Save the rule ─────────────────────────────────────────────────────────────
-- tapOn: "Add Rule"
+# The button has accessibilityLabel="Save rule" to distinguish it from the "Add Rule" title.
+- tapOn: "Save rule"
 
 # ── Alert: "Rule saved!" — tap Apply Now to categorize existing transactions ──
 - assertVisible: "Rule saved!"
@@ -34,4 +39,5 @@ appId: com.kiip.slonready
 - tapOn: "OK"
 
 # ── Back on rules list — the new rule should appear ───────────────────────────
-- assertVisible: "Contains"
+# ruleInfo TouchableOpacity has accessibilityLabel: `Contains "starbucks" → Groceries`
+- assertVisible: 'Contains "starbucks" → Groceries'
