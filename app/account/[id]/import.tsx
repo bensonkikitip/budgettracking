@@ -71,6 +71,41 @@ export default function ImportScreen() {
 
   const accent = account ? accountColor[account.type] : colors.primary;
 
+  // ── Test fixture loader (dev builds only) ───────────────────────────────────
+
+  async function loadTestFixture(name: 'sample_onboarding' | 'sample_import') {
+    if (!__DEV__) return;
+    setLoading(true);
+    try {
+      // require() inside __DEV__ guard — Metro tree-shakes this from prod builds
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { SAMPLE_ONBOARDING_CSV, SAMPLE_IMPORT_CSV } = require('../../../src/test/fixtures');
+      const text: string = name === 'sample_onboarding' ? SAMPLE_ONBOARDING_CSV : SAMPLE_IMPORT_CSV;
+
+      if (!account) throw new Error('Account not found');
+      let columnConfig = parseColumnConfig(account);
+      if (account.csv_format === 'custom') {
+        const detected = detectColumnConfig(text);
+        columnConfig = detected.config;
+        await updateAccount(accountId, { column_config: JSON.stringify(detected.config) });
+        setAccount(prev => prev ? { ...prev, column_config: JSON.stringify(detected.config) } : prev);
+      }
+      const rows = parseCsv(columnConfig, text);
+      if (rows.length === 0) throw new Error('No transactions found in fixture.');
+      const ids = assignTransactionIds(
+        rows.map(r => ({ accountId, dateIso: r.dateIso, amountCents: r.amountCents, description: r.description })),
+      );
+      setPreview({ filename: `${name}.csv`, rows, ids });
+      setCachedUri(null);
+      setIsFromPdf(false);
+      setPhase('preview');
+    } catch (e: any) {
+      Alert.alert('Fixture load failed', e.message ?? 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // ── CSV flow ────────────────────────────────────────────────────────────────
 
   async function handlePickFile() {
@@ -264,6 +299,29 @@ export default function ImportScreen() {
   return (
     <>
       <Stack.Screen options={{ title: isFromPdf ? 'Import PDF Statement' : 'Import CSV' }} />
+
+      {/* ── Dev-only fixture bar — OUTSIDE the ScrollView so it's always
+          on-screen and always in the iOS accessibility tree. Maestro's
+          XCUITest snapshot excludes off-screen ScrollView content, so
+          this must live outside any scroll container. Only shown during
+          the pick phase (when the file-chooser buttons are shown). ── */}
+      {__DEV__ && phase === 'pick' && (
+        <View style={styles.devFixtureBar}>
+          <TouchableOpacity
+            style={styles.devFixtureBarBtn}
+            onPress={() => loadTestFixture('sample_onboarding')}
+          >
+            <Text style={styles.devFixtureBarText}>Load sample_onboarding.csv</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.devFixtureBarBtn}
+            onPress={() => loadTestFixture('sample_import')}
+          >
+            <Text style={styles.devFixtureBarText}>Load sample_import.csv</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}
@@ -659,6 +717,23 @@ const styles = StyleSheet.create({
   statRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.separator },
   statLabel:     { fontFamily: font.regular, fontSize: 15, color: colors.textSecondary },
   statValue:     { fontFamily: font.bold, fontSize: 15, color: colors.text },
+
+  // Dev-only fixture bar (outside ScrollView, always on-screen)
+  devFixtureBar: {
+    flexDirection: 'row', gap: spacing.xs, padding: spacing.xs,
+    borderBottomWidth: 1, borderBottomColor: colors.separator,
+    backgroundColor: colors.surface,
+  },
+  devFixtureBarBtn: {
+    flex: 1, alignItems: 'center',
+    paddingVertical: 6, paddingHorizontal: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  devFixtureBarText: {
+    fontFamily: font.regular, fontSize: 11, color: colors.textSecondary,
+  },
 
   // Shared
   primaryButton: {

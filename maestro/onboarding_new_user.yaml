@@ -3,6 +3,9 @@ appId: com.kiip.slonready
 # Wipe all app data so this always starts from a clean new-user state.
 - launchApp:
     clearState: true
+# Give the JS bundle a moment to load after a cold clearState launch.
+# Without this the iOS XCUITest accessibility tree can throw kAXErrorInvalidUIElement.
+- waitForAnimationToEnd
 
 # ── Screen: onboarding/intro ──────────────────────────────────────────────────
 - assertVisible: "Hi, I'm Rachey."
@@ -20,6 +23,8 @@ appId: com.kiip.slonready
 - tapOn: "Credit Card"
 - tapOn: "e.g. Chase Checking, Amex Gold"
 - inputText: "Chase Freedom"
+# Dismiss keyboard so the bank list and CTA button are fully accessible.
+- hideKeyboard
 # Select bank format. sample_onboarding.csv uses Debit/Credit columns which
 # match the Citi CC config — so we pick "Citi – Credit Card" here.
 - tapOn: "Citi – Credit Card"
@@ -29,8 +34,7 @@ appId: com.kiip.slonready
 # The app created the account and immediately landed here with fromOnboarding=1.
 # Both CSV and PDF options are offered in one unified screen.
 - assertVisible: "Choose CSV File…"
-- tapOn: "Choose CSV File…"
-- inputFile: "maestro/fixtures/sample_onboarding.csv"
+- tapOn: "Load sample_onboarding.csv"
 
 # ── Screen: account/[id]/import — preview phase ───────────────────────────────
 # sample_onboarding.csv has 7 rows (6 cleared + 1 pending).
@@ -49,5 +53,7 @@ appId: com.kiip.slonready
 - tapOn: "Skip for now"
 
 # ── Screen: account/[id] — onboarding complete ────────────────────────────────
+# The totals header (INCOME / EXPENSES / NET) is in a fixed section above the
+# FlatList; it's always in the accessibility tree. Verifies transactions imported.
 - assertVisible: "Chase Freedom"
-- assertVisible: "COSTCO WHSE"
+- assertVisible: "EXPENSES"

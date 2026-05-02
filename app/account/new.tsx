@@ -78,6 +78,7 @@ export default function AddAccountScreen() {
         {ACCOUNT_TYPES.map((t, i) => (
           <TouchableOpacity
             key={t.value}
+            accessibilityLabel={t.label}
             style={[
               styles.option,
               i > 0 && styles.optionBorder,
@@ -120,6 +121,7 @@ export default function AddAccountScreen() {
         {formatsForType.map((f, i) => (
           <TouchableOpacity
             key={f.value}
+            accessibilityLabel={f.label}
             style={[
               styles.option,
               i > 0 && styles.optionBorder,
@@ -138,6 +140,7 @@ export default function AddAccountScreen() {
         ))}
         {/* "My bank isn't listed" — always at the bottom */}
         <TouchableOpacity
+          accessibilityLabel="My bank isn't listed"
           style={[
             styles.option,
             formatsForType.length > 0 && styles.optionBorder,

@@ -5,6 +5,7 @@ appId: com.kiip.slonready
 # foundational rules setup without importing any transactions first.
 - launchApp:
     clearState: true
+- waitForAnimationToEnd
 
 # ── Screen: onboarding/intro ──────────────────────────────────────────────────
 - assertVisible: "Hi, I'm Rachey."
@@ -19,6 +20,7 @@ appId: com.kiip.slonready
 - tapOn: "Checking"
 - tapOn: "e.g. Chase Checking, Amex Gold"
 - inputText: "BofA Checking"
+- hideKeyboard
 - tapOn: "Bank of America – Checking"
 - tapOn: "Add Account & Import →"
 

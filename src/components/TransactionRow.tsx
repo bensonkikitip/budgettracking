@@ -78,7 +78,11 @@ export function TransactionRow({ transaction, accountBadge, category, onPress, b
 
   if (onPress || bulkMode) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityLabel={category ? `${transaction.description}, ${category.name}` : transaction.description}
+      >
         {content}
       </TouchableOpacity>
     );
