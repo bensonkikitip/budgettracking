@@ -5,6 +5,7 @@ import {
   Account, ImportBatch, Transaction, Category, Rule, Budget,
   FoundationalRuleSetting, AppPreference,
 } from './queries';
+import { Target } from './queries/targets';
 
 export const BACKUP_PATH      = (FileSystem.documentDirectory ?? '') + 'slo-n-ready-backup.json';
 // Tiny sidecar with just the metadata needed by the home-screen restore banner.
@@ -43,6 +44,8 @@ export interface BackupData {
   // v4.0 additions (optional so v3 backups still parse cleanly)
   foundational_rule_settings?: FoundationalRuleSetting[];
   app_preferences?:            AppPreference[];
+  // v4.9 addition (optional so older backups still parse cleanly)
+  targets?:                    Target[];
 }
 
 export interface BackupInfo {
@@ -97,7 +100,7 @@ export async function snapshotAllTables(db: SQLite.SQLiteDatabase): Promise<Back
   };
   const [
     accounts, import_batches, transactions, categories, rules, budgets,
-    foundational_rule_settings, app_preferences,
+    foundational_rule_settings, app_preferences, targets,
   ] = await Promise.all([
     safe<Account>                ('SELECT * FROM accounts ORDER BY created_at ASC'),
     safe<ImportBatch>            ('SELECT * FROM import_batches ORDER BY imported_at ASC'),
@@ -107,9 +110,10 @@ export async function snapshotAllTables(db: SQLite.SQLiteDatabase): Promise<Back
     safe<Budget>                 ('SELECT * FROM budgets ORDER BY account_id, category_id, month'),
     safe<FoundationalRuleSetting>('SELECT * FROM foundational_rule_settings ORDER BY account_id, rule_id'),
     safe<AppPreference>          ('SELECT * FROM app_preferences ORDER BY key'),
+    safe<Target>                 ('SELECT * FROM targets ORDER BY account_id, month, category_id ASC NULLS FIRST'),
   ]);
   return {
-    version:                    4,
+    version:                    5,
     exported_at:                Date.now(),
     accounts,
     import_batches,
@@ -119,6 +123,7 @@ export async function snapshotAllTables(db: SQLite.SQLiteDatabase): Promise<Back
     budgets,
     foundational_rule_settings,
     app_preferences,
+    targets,
   };
 }
 
@@ -145,7 +150,7 @@ export async function readBackupFromPath(uri: string): Promise<BackupData | null
     const text = await FileSystem.readAsStringAsync(uri);
     const data = JSON.parse(text);
     // Accept v1–v4 backups (v4 adds foundational_rule_settings + app_preferences)
-    if (![1, 2, 3, 4].includes(data.version) || !Array.isArray(data.accounts) || !Array.isArray(data.transactions)) {
+    if (![1, 2, 3, 4, 5].includes(data.version) || !Array.isArray(data.accounts) || !Array.isArray(data.transactions)) {
       return null;
     }
     return data as BackupData;
@@ -183,6 +188,7 @@ export async function restoreFromData(data: BackupData): Promise<void> {
     // Delete in FK-safe order (children before parents)
     await db.execAsync('DELETE FROM foundational_rule_settings');
     await db.execAsync('DELETE FROM app_preferences');
+    await db.execAsync('DELETE FROM targets');
     await db.execAsync('DELETE FROM transactions');
     await db.execAsync('DELETE FROM import_batches');
     await db.execAsync('DELETE FROM budgets');
@@ -262,6 +268,16 @@ export async function restoreFromData(data: BackupData): Promise<void> {
         p.key, p.value, p.updated_at,
       ]),
       200,
+    );
+
+    // v4.9 table — optional in backup (absent in v4 and earlier backups).
+    await batchInsertOrReplace(db, 'targets',
+      ['id', 'account_id', 'category_id', 'month', 'amount_cents', 'reviewed_at', 'created_at'],
+      (data.targets ?? []).map(t => [
+        t.id, t.account_id, t.category_id ?? null, t.month,
+        t.amount_cents, t.reviewed_at ?? null, t.created_at,
+      ]),
+      125,
     );
   });
   // Refresh the sidecar so getBackupInfo reflects the restored DB without

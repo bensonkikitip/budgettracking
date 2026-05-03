@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { snapshotAllTables, BACKUP_PATH } from './backup';
 
-const LATEST_DB_VERSION = 13;
+const LATEST_DB_VERSION = 14;
 
 // Written before any migration runs so the user can always roll back.
 // Uses snapshotAllTables (in backup.ts) so the file format always matches the
@@ -442,6 +442,31 @@ async function _init(): Promise<SQLite.SQLiteDatabase> {
     } finally {
       await db.execAsync('PRAGMA foreign_keys = ON');
     }
+  }
+
+  if (version < 14) {
+    // Spending targets — soft monthly aspirations set per account or per
+    // account+category. Separate from the standing budgets table so targets
+    // can be set for a single month without altering the recurring budget.
+    //
+    // account_id + category_id + month is the natural unique key.
+    // category_id IS NULL means an account-level total-spend target.
+    // reviewed_at is set (ms epoch) when the month-end review flow fires;
+    // NULL means the review hasn't happened yet for that month.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS targets (
+        id            TEXT    NOT NULL PRIMARY KEY,
+        account_id    TEXT    NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        category_id   TEXT             REFERENCES categories(id) ON DELETE CASCADE,
+        month         TEXT    NOT NULL,
+        amount_cents  INTEGER NOT NULL,
+        reviewed_at   INTEGER,
+        created_at    INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_targets_account_month
+        ON targets (account_id, month);
+      PRAGMA user_version = 14;
+    `);
   }
 
   _db = db;
