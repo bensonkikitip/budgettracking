@@ -31,9 +31,10 @@ Run before every release. Pre-flight steps are non-negotiable.
    maestro test maestro/rule_apply.yaml
    maestro test maestro/backup_restore.yaml
    maestro test maestro/period_nav.yaml
+   maestro test maestro/pdf_import_flow.yaml
    ```
-   All 7 flows must pass. Install Maestro via `curl -Ls "https://get.maestro.mobile.dev" | bash` (current tested version: 2.5.0).
-   Note: Maestro cannot drive the iOS document picker for arbitrary file types. The import flows use dev-only "Load … .csv" buttons that appear only in `__DEV__` builds and feed fixture data through the real parse pipeline — no real file picker interaction needed in tests.
+   All 8 flows must pass. Install Maestro via `curl -Ls "https://get.maestro.mobile.dev" | bash` (current tested version: 2.5.0).
+   Note: Maestro cannot drive the iOS document picker for arbitrary file types. The CSV import flows use dev-only "Load … .csv" buttons; the PDF flow uses a dev-only "Load sample_citi_statement.pdf" button — both appear only in `__DEV__` builds and feed fixture data through the real parse pipeline. No real file picker interaction needed in tests.
 
 ### Update docs (mandatory when applicable)
 5. **Update `docs/SCHEMA.md`** if any DB change was made:
