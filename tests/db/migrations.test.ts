@@ -16,7 +16,17 @@ describe('migrations', () => {
   it('applies all migrations on a fresh DB and lands at LATEST_DB_VERSION', async () => {
     const { db } = await createTestDb();
     const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    expect(row?.user_version).toBe(14);
+    expect(row?.user_version).toBe(15);
+  });
+
+  it('transactions table has source_is_manual column with DEFAULT 0', async () => {
+    const { db } = await createTestDb();
+    const cols = await db.getAllAsync<{ name: string; dflt_value: string | null }>(
+      `PRAGMA table_info(transactions)`,
+    );
+    const col = cols.find(c => c.name === 'source_is_manual');
+    expect(col).toBeDefined();
+    expect(col?.dflt_value).toBe('0');
   });
 
   it('creates every table documented in docs/SCHEMA.md', async () => {

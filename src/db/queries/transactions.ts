@@ -26,6 +26,25 @@ export interface Transaction {
   category_id: string | null;
   category_set_manually: number;
   applied_rule_id: string | null;
+  /** 0 = imported from CSV/PDF; 1 = entered manually via the Add screen */
+  source_is_manual: number;
+}
+
+/** A manual/imported pair identified as a potential duplicate during reconciliation. */
+export interface ReconciliationPair {
+  manualTx: {
+    id: string;
+    date: string;
+    amount_cents: number;
+    description: string;
+    category_id: string | null;
+    category_set_manually: number;
+  };
+  importedTx: {
+    id: string;
+    date: string;
+    description: string;
+  };
 }
 
 export interface AccountSummary {
@@ -129,11 +148,12 @@ export async function importTransactions(
     }
 
     // --- Pass 1b: bulk INSERT OR IGNORE the new rows ---
-    // 10 cols × 75 rows = 750 params, under SQLite's 999-variable limit
+    // 11 cols, 9 bound params per row (dropped_at=NULL, source_is_manual=0 are literals)
+    // 9 × 75 = 675 params, under SQLite's 999-variable limit
     const newRows = rows.filter(r => !existingIds.has(r.id));
     inserted = newRows.length;
     const INSERT_CHUNK = 75;
-    const newRowCols = '(?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)';
+    const newRowCols = '(?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)';
     for (let i = 0; i < newRows.length; i += INSERT_CHUNK) {
       const chunk = newRows.slice(i, i + INSERT_CHUNK);
       const placeholders = chunk.map(() => newRowCols).join(', ');
@@ -144,7 +164,7 @@ export async function importTransactions(
       await db.runAsync(
         `INSERT OR IGNORE INTO transactions
            (id, account_id, date, amount_cents, description, original_description,
-            is_pending, dropped_at, import_batch_id, created_at)
+            is_pending, dropped_at, import_batch_id, created_at, source_is_manual)
          VALUES ${placeholders}`,
         ...params,
       );
@@ -250,8 +270,8 @@ export async function insertManualTransaction(
   const result = await db.runAsync(
     `INSERT OR IGNORE INTO transactions
        (id, account_id, date, amount_cents, description, original_description,
-        is_pending, dropped_at, import_batch_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
+        is_pending, dropped_at, import_batch_id, created_at, source_is_manual)
+     VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, 1)`,
     txId, accountId, dateIso, amountCents,
     normalised, description,
     batchId, now,
@@ -682,4 +702,105 @@ export async function getUncategorizedTransactionsForAccount(accountId: string):
      ORDER BY date DESC, created_at DESC`,
     accountId,
   );
+}
+
+// ── Reconciliation ────────────────────────────────────────────────────────────
+
+/**
+ * Find manual transactions that are potential duplicates of transactions in
+ * a specific import batch. Match criteria: same account, same amount_cents,
+ * date within ±1 day. Returns at most one imported-tx partner per manual tx.
+ *
+ * Used after import confirms to offer the user a chance to merge/delete the
+ * manual entries that the import has now made redundant.
+ */
+export async function findReconciliationCandidates(
+  accountId: string,
+  batchId: string,
+): Promise<ReconciliationPair[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    manual_id: string;
+    manual_date: string;
+    manual_amount_cents: number;
+    manual_description: string;
+    manual_category_id: string | null;
+    manual_category_set_manually: number;
+    imported_id: string;
+    imported_date: string;
+    imported_description: string;
+  }>(
+    `SELECT
+       m.id                     AS manual_id,
+       m.date                   AS manual_date,
+       m.amount_cents           AS manual_amount_cents,
+       m.description            AS manual_description,
+       m.category_id            AS manual_category_id,
+       m.category_set_manually  AS manual_category_set_manually,
+       i.id                     AS imported_id,
+       i.date                   AS imported_date,
+       i.description            AS imported_description
+     FROM transactions m
+     JOIN (
+       SELECT * FROM transactions
+       WHERE import_batch_id = ? AND account_id = ? AND dropped_at IS NULL
+     ) i ON  i.account_id   = m.account_id
+         AND i.amount_cents = m.amount_cents
+         AND abs(julianday(i.date) - julianday(m.date)) <= 1
+     WHERE m.source_is_manual = 1
+       AND m.account_id        = ?
+       AND m.dropped_at IS NULL
+     GROUP BY m.id
+     ORDER BY m.date DESC`,
+    batchId, accountId, accountId,
+  );
+
+  return rows.map(r => ({
+    manualTx: {
+      id:                    r.manual_id,
+      date:                  r.manual_date,
+      amount_cents:          r.manual_amount_cents,
+      description:           r.manual_description,
+      category_id:           r.manual_category_id,
+      category_set_manually: r.manual_category_set_manually,
+    },
+    importedTx: {
+      id:          r.imported_id,
+      date:        r.imported_date,
+      description: r.imported_description,
+    },
+  }));
+}
+
+/**
+ * Merge a manual transaction into its imported counterpart:
+ * - If the manual tx had a user-set category, copy it to the imported tx.
+ * - Hard-delete the manual tx (it was never in a bank feed, so dropped_at
+ *   doesn't apply — a hard delete is the correct semantic here).
+ *
+ * Wrapped in a DB transaction so the copy + delete are atomic.
+ */
+export async function mergeManualIntoImported(
+  manualId: string,
+  importedId: string,
+  manualCategoryId: string | null,
+  manualCategorySetManually: number,
+): Promise<void> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    // Copy category only when the user explicitly set it on the manual entry.
+    if (manualCategorySetManually === 1 && manualCategoryId !== null) {
+      await db.runAsync(
+        `UPDATE transactions
+         SET category_id           = ?,
+             category_set_manually = 1,
+             applied_rule_id       = NULL
+         WHERE id = ?`,
+        manualCategoryId, importedId,
+      );
+    }
+    // Hard-delete: manual transactions were never part of a bank feed, so
+    // the dropped_at soft-delete pattern doesn't apply here.
+    await db.runAsync(`DELETE FROM transactions WHERE id = ?`, manualId);
+  });
 }

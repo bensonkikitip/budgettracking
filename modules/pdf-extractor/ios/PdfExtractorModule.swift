@@ -41,7 +41,10 @@ public class PdfExtractorModule: Module {
 
         // selectionsByLine() returns an array of PDFSelection objects, one per line.
         // We split each line into individual words and get a bounding box per word.
-        guard let fullSelection = page.selectionForEntirePage() else { continue }
+        // PDFPage.string gives the full text; we build a full-page range selection from it.
+        guard let pageString = page.string, !pageString.isEmpty else { continue }
+        let fullRange = NSRange(location: 0, length: (pageString as NSString).length)
+        guard let fullSelection = page.selection(for: fullRange) else { continue }
         let lineSelections = fullSelection.selectionsByLine()
 
         for lineSelection in lineSelections {

@@ -4,7 +4,7 @@ describe('createTestDb', () => {
   it('returns a fully-migrated in-memory DB at LATEST_DB_VERSION', async () => {
     const { db } = await createTestDb();
     const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    expect(row?.user_version).toBe(14);
+    expect(row?.user_version).toBe(15);
   });
 
   it('isolates state between calls', async () => {

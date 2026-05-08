@@ -1,6 +1,6 @@
 {
   "name": "budgetapp",
-  "version": "4.8.2",
+  "version": "4.9.1",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -32,6 +32,7 @@
     }
   },
   "dependencies": {
+    "pdf-extractor": "file:./modules/pdf-extractor",
     "@expo-google-fonts/nunito": "^0.4.2",
     "expo": "~54.0.33",
     "expo-constants": "~18.0.13",

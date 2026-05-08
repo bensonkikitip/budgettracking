@@ -1,0 +1,64 @@
+appId: com.kiip.slonready
+---
+# Precondition: full onboarding with Feb 2026 data (Chase Freedom account).
+- runFlow: "onboarding_new_user.yaml"
+
+# ── Manually add a transaction that will overlap with sample_import.csv ────────
+# sample_import.csv contains STARBUCKS #12345 on 03/14/2026 for $7.25.
+# We add a manual entry at the same amount / same date so a reconcile candidate
+# is found after the import.
+- tapOn: "+"
+- assertVisible: "Add Transaction"
+
+# Fill date
+- tapOn: "Date field"
+- inputText: "2026-03-14"
+
+# Fill amount (negative = expense)
+- tapOn: "Amount field"
+- inputText: "-7.25"
+
+# Fill description, then press Enter — description field has onSubmitEditing=handleSave
+# so the Done key saves the transaction and router.back() returns to account detail.
+- tapOn: "Description field"
+- inputText: "Starbucks"
+- pressKey: enter
+- assertVisible: "Chase Freedom"
+
+# ── Import sample_import.csv (contains the matching STARBUCKS transaction) ─────
+- tapOn: "Import"
+- assertVisible: "Choose CSV File…"
+- tapOn: "Load sample_import.csv"
+- assertVisible: "12 transactions found"
+- tapOn: "Import 12 Transactions"
+
+# ── Done phase: reconcile CTA must appear ─────────────────────────────────────
+- assertVisible: "All done — nice work!"
+# The reconcile card renders near the bottom of the ScrollView; tapOn's built-in
+# retry handles any brief delay. If the card is absent this tap fails clearly.
+- tapOn: "Review →"
+
+# ── Reconcile screen ──────────────────────────────────────────────────────────
+- assertVisible: "Review Overlaps"
+- assertVisible: "Manual entry"
+- assertVisible: "From statement"
+- assertVisible: "Merge — keep statement"
+- assertVisible: "Keep both"
+
+# Merge: deletes the manual entry and keeps the imported transaction.
+# Any manually-set category would be carried over, but we haven't categorized here.
+- tapOn: "Merge — keep statement"
+
+# After the only pair is resolved the empty state appears
+- assertVisible: "All sorted!"
+- tapOn: "Done"
+
+# ── Back on import done screen ────────────────────────────────────────────────
+# The reconcile card is still visible (state preserved); "Back to Account" is
+# below it. Scroll down to bring it into the viewport before tapping.
+- assertVisible: "All done — nice work!"
+- swipe:
+    direction: UP
+    duration: 400
+- tapOn: "Back to Account"
+- assertVisible: "Chase Freedom"

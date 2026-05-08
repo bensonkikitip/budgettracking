@@ -14,6 +14,7 @@ import {
   updateAccount, getDistinctMonths,
 } from '../../../src/db/queries';
 import { writeBackupSafe } from '../../../src/db/backup';
+import { findReconciliationCandidates } from '../../../src/db/queries/transactions';
 import { autoApplyRulesForAccount, ApplyResult } from '../../../src/domain/rules-engine';
 import {
   parseCsv, ParsedRow,
@@ -61,9 +62,11 @@ export default function ImportScreen() {
   const [applyResult,  setApplyResult]  = useState<ApplyResult | null>(null);
   const [loading,      setLoading]      = useState(false);
   const [account,      setAccount]      = useState<Account | null>(null);
-  const [racheyMoment, setRacheyMoment] = useState<'firstImport' | 'recurringImport' | null>(null);
-  const [cachedUri,    setCachedUri]    = useState<string | null>(null);
-  const [isFromPdf,    setIsFromPdf]    = useState(false);
+  const [racheyMoment,          setRacheyMoment]          = useState<'firstImport' | 'recurringImport' | null>(null);
+  const [cachedUri,             setCachedUri]             = useState<string | null>(null);
+  const [isFromPdf,             setIsFromPdf]             = useState(false);
+  const [reconcileCandidateCount, setReconcileCandidateCount] = useState(0);
+  const [lastBatchId,           setLastBatchId]           = useState<string | null>(null);
 
   React.useEffect(() => {
     getAllAccounts().then(accts => setAccount(accts.find(a => a.id === accountId) ?? null));
@@ -289,6 +292,15 @@ export default function ImportScreen() {
 
       const applied = await autoApplyRulesForAccount(accountId);
       writeBackupSafe();
+
+      // Check for near-duplicate manual transactions (non-fatal — never blocks the done phase)
+      let candidateCount = 0;
+      try {
+        const candidates = await findReconciliationCandidates(accountId, batchId);
+        candidateCount = candidates.length;
+      } catch { /* non-fatal */ }
+      setLastBatchId(batchId);
+      setReconcileCandidateCount(candidateCount);
 
       // Delete the cached copy — CSV or PDF — the app never needs it again
       if (cachedUri) {
@@ -544,6 +556,33 @@ export default function ImportScreen() {
               </TouchableOpacity>
             </View>
 
+            {reconcileCandidateCount > 0 && (
+              <View style={styles.reconcileCard}>
+                <Text style={styles.reconcileTitle}>
+                  ⚠️ Possible duplicates
+                </Text>
+                <Text style={styles.reconcileBody}>
+                  {reconcileCandidateCount} manual {reconcileCandidateCount === 1 ? 'entry' : 'entries'} from this period may already be in your statement.
+                </Text>
+                <View style={styles.reconcileActions}>
+                  <TouchableOpacity
+                    style={[styles.reconcileReviewBtn, { backgroundColor: accent }]}
+                    onPress={() => router.push(`/account/${accountId}/reconcile?batchId=${lastBatchId}`)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.reconcileReviewText}>Review →</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.reconcileSkipBtn}
+                    onPress={() => setReconcileCandidateCount(0)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.reconcileSkipText}>Skip</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: accent }]}
               onPress={() => fromOnboarding === '1'
@@ -751,6 +790,32 @@ const styles = StyleSheet.create({
   devFixtureBarText: {
     fontFamily: font.regular, fontSize: 11, color: colors.textSecondary,
   },
+
+  // Reconcile CTA card
+  reconcileCard: {
+    width: '100%',
+    backgroundColor: '#FFF8EC',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#F5C84A',
+    gap: spacing.sm,
+  },
+  reconcileTitle: { fontFamily: font.semiBold, fontSize: 15, color: '#7A5C00' },
+  reconcileBody:  { fontFamily: font.regular, fontSize: 14, color: '#7A5C00', lineHeight: 20 },
+  reconcileActions: { flexDirection: 'row', gap: spacing.sm, marginTop: 2 },
+  reconcileReviewBtn: {
+    flex: 1, borderRadius: radius.full,
+    paddingVertical: 11, alignItems: 'center',
+  },
+  reconcileReviewText: { fontFamily: font.bold, fontSize: 14, color: colors.textOnColor },
+  reconcileSkipBtn: {
+    flex: 1, borderRadius: radius.full,
+    paddingVertical: 11, alignItems: 'center',
+    borderWidth: 1, borderColor: '#F5C84A',
+    backgroundColor: 'transparent',
+  },
+  reconcileSkipText: { fontFamily: font.semiBold, fontSize: 14, color: '#7A5C00' },
 
   // Shared
   primaryButton: {

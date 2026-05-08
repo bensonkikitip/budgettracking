@@ -453,6 +453,10 @@ export default function AccountDetailScreen() {
             <Text style={styles.menuItemText}>Budget</Text>
           </TouchableOpacity>
           <View style={styles.menuDivider} />
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); router.push(`/account/${id}/targets`); }}>
+            <Text style={styles.menuItemText}>Targets</Text>
+          </TouchableOpacity>
+          <View style={styles.menuDivider} />
           <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); router.push(`/account/${id}/edit`); }}>
             <Text style={styles.menuItemText}>Edit Account</Text>
           </TouchableOpacity>

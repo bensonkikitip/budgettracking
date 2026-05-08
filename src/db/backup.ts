@@ -240,16 +240,23 @@ export async function restoreFromData(data: BackupData): Promise<void> {
       100,
     );
 
-    // 13 cols × 75 rows = 975 params, under SQLite's 999 limit
+    // 14 cols × 71 rows = 994 params, under SQLite's 999 limit
     await batchInsertOrReplace(db, 'transactions',
-      ['id', 'account_id', 'date', 'amount_cents', 'description', 'original_description', 'is_pending', 'dropped_at', 'import_batch_id', 'created_at', 'category_id', 'category_set_manually', 'applied_rule_id'],
+      ['id', 'account_id', 'date', 'amount_cents', 'description', 'original_description', 'is_pending', 'dropped_at', 'import_batch_id', 'created_at', 'category_id', 'category_set_manually', 'applied_rule_id', 'source_is_manual'],
       data.transactions.map(t => [
         t.id, t.account_id, t.date, t.amount_cents, t.description,
         t.original_description, t.is_pending, t.dropped_at ?? null,
         t.import_batch_id, t.created_at,
         t.category_id ?? null, t.category_set_manually ?? 0, t.applied_rule_id ?? null,
+        t.source_is_manual ?? 0,
       ]),
-      75,
+      71,
+    );
+    // Old backups (pre-v4.9.1) lack source_is_manual; the ?? 0 default above
+    // sets everything to 0 (imported). Re-apply the migration backfill so
+    // manual entries get the correct flag restored.
+    await db.runAsync(
+      `UPDATE transactions SET source_is_manual = 1 WHERE import_batch_id LIKE 'manual-%'`,
     );
 
     // v4.0 tables — optional in backup (absent in v3 and earlier backups).

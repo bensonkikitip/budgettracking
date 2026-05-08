@@ -24,7 +24,8 @@ appId: com.kiip.slonready
 - tapOn: "e.g. Chase Checking, Amex Gold"
 - inputText: "Chase Freedom"
 # Dismiss keyboard so the bank list and CTA button are fully accessible.
-- hideKeyboard
+# returnKeyType="done" on the name field means the Return key dismisses the keyboard.
+- pressKey: enter
 # Select bank format. sample_onboarding.csv uses Debit/Credit columns which
 # match the Citi CC config — so we pick "Citi – Credit Card" here.
 - tapOn: "Citi – Credit Card"

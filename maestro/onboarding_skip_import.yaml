@@ -20,7 +20,7 @@ appId: com.kiip.slonready
 - tapOn: "Checking"
 - tapOn: "e.g. Chase Checking, Amex Gold"
 - inputText: "BofA Checking"
-- hideKeyboard
+- pressKey: enter
 - tapOn: "Bank of America – Checking"
 - tapOn: "Add Account & Import →"
 

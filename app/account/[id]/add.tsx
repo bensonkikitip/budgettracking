@@ -129,6 +129,7 @@ export default function AddTransactionScreen() {
           keyboardType="numbers-and-punctuation"
           autoCorrect={false}
           returnKeyType="next"
+          accessibilityLabel="Date field"
         />
 
         {/* Amount */}
@@ -142,6 +143,7 @@ export default function AddTransactionScreen() {
           keyboardType="numbers-and-punctuation"
           autoCorrect={false}
           returnKeyType="next"
+          accessibilityLabel="Amount field"
         />
 
         {/* Description */}
@@ -155,7 +157,7 @@ export default function AddTransactionScreen() {
           autoCorrect={false}
           returnKeyType="done"
           onSubmitEditing={handleSave}
-          multiline
+          accessibilityLabel="Description field"
         />
 
         {/* Save button */}

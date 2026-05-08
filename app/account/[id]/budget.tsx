@@ -322,7 +322,7 @@ export default function BudgetScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Budget',
+          title: 'Spending Goals',
           headerRight: () => (
             <TouchableOpacity onPress={() => setGlobalMenu(true)} hitSlop={12} style={{ marginRight: 4 }}>
               <Text style={[styles.menuDots, { color: accent }]}>•••</Text>

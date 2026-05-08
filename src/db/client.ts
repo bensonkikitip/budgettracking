@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { snapshotAllTables, BACKUP_PATH } from './backup';
 
-const LATEST_DB_VERSION = 14;
+const LATEST_DB_VERSION = 15;
 
 // Written before any migration runs so the user can always roll back.
 // Uses snapshotAllTables (in backup.ts) so the file format always matches the
@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   is_pending           INTEGER NOT NULL DEFAULT 0,
   dropped_at           INTEGER DEFAULT NULL,
   import_batch_id      TEXT NOT NULL REFERENCES import_batches(id),
-  created_at           INTEGER NOT NULL
+  created_at           INTEGER NOT NULL,
+  source_is_manual     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_tx_account_date ON transactions (account_id, date DESC);
@@ -467,6 +468,23 @@ async function _init(): Promise<SQLite.SQLiteDatabase> {
         ON targets (account_id, month);
       PRAGMA user_version = 14;
     `);
+  }
+
+  if (version < 15) {
+    // Transaction source tracking — distinguishes manually-entered transactions
+    // from imported ones (CSV / PDF). Backend-only flag; no UI indicator.
+    // Default 0 = imported. 1 = entered manually via the Add screen.
+    // Backfill: existing manual transactions use a singleton batch ID that
+    // follows the 'manual-{accountId}' pattern.
+    try {
+      await db.execAsync(
+        `ALTER TABLE transactions ADD COLUMN source_is_manual INTEGER NOT NULL DEFAULT 0`,
+      );
+    } catch {}
+    await db.runAsync(
+      `UPDATE transactions SET source_is_manual = 1 WHERE import_batch_id LIKE 'manual-%'`,
+    );
+    await db.execAsync('PRAGMA user_version = 15');
   }
 
   _db = db;

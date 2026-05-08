@@ -6,7 +6,7 @@
 
 **Database**: local SQLite file `budgetapp.db`, opened via `expo-sqlite`.
 **Foreign keys**: enabled (`PRAGMA foreign_keys = ON`). Cascading deletes are intentional.
-**Schema version**: tracked via `PRAGMA user_version`. Current = **13** (v4.6).
+**Schema version**: tracked via `PRAGMA user_version`. Current = **15** (v4.9.1).
 
 ---
 
@@ -81,6 +81,7 @@ Individual transactions imported from CSVs.
 | `category_id` | `TEXT REFERENCES categories(id) ON DELETE SET NULL` | Nullable. |
 | `category_set_manually` | `INTEGER NOT NULL DEFAULT 0` | 1 = user picked it; 0 = rule applied (or none). Manual rows are skipped by rule auto-apply. |
 | `applied_rule_id` | `TEXT` | Which rule categorized this row. Contract: `NULL` (manual or uncategorized), a real `rules.id` (user rule), or `'foundational:<rule_id>'` (built-in rule). **No FK** — the foreign key was dropped in migration 12 to allow synthetic foundational IDs. `ON DELETE SET NULL` for user rules is now enforced in code: `deleteRule` clears matching rows. |
+| `source_is_manual` | `INTEGER NOT NULL DEFAULT 0` | 1 = entered manually via the Add screen; 0 = imported via CSV or PDF. Backend-only — no UI indicator. Set at insert time by `insertManualTransaction` (1) and `importTransactions` (0). Used by the reconciliation query to find manual entries that overlap an import batch. |
 
 **Indexes**:
 - `idx_tx_account_date` on `(account_id, date DESC)`
@@ -168,6 +169,24 @@ Per-account user state for built-in (foundational) rules. The rule **logic** liv
 
 ---
 
+### `targets`
+Soft monthly aspirations — set per account or per account+category. Separate from `budgets` so a user can set a one-month target without touching their recurring budget.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY` | Random UUID. |
+| `account_id` | `TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE` | |
+| `category_id` | `TEXT REFERENCES categories(id) ON DELETE CASCADE` | Nullable. `NULL` = account-level total-spend target; non-null = category-level target. |
+| `month` | `TEXT NOT NULL` | `YYYY-MM`. |
+| `amount_cents` | `INTEGER NOT NULL` | Signed (negative = spending target). |
+| `reviewed_at` | `INTEGER` | ms timestamp. Set when the month-end review flow fires; `NULL` = not yet reviewed. |
+| `created_at` | `INTEGER NOT NULL` | ms timestamp. |
+
+**Index**: `idx_targets_account_month` on `(account_id, month)`.
+**Unique key**: `(account_id, category_id, month)` — enforced in application code by upsert logic.
+
+---
+
 ### `app_preferences`
 Lightweight key/value store for app-level boolean flags and settings.
 
@@ -210,7 +229,8 @@ interface Transaction   { id; account_id; date: string /*YYYY-MM-DD*/;
                           is_pending: number; dropped_at: number|null;
                           import_batch_id; created_at: number;
                           category_id: string|null; category_set_manually: number;
-                          applied_rule_id: string|null; }
+                          applied_rule_id: string|null;
+                          source_is_manual: number; }  // v4.9.1 — 1=manual, 0=imported
 interface Category      { id; name; color: string /*#hex*/;
                           emoji: string|null;          // v4.0 — nullable
                           description: string|null;    // v4.0 — nullable
@@ -276,6 +296,8 @@ All migrations live in [`src/db/client.ts`](../src/db/client.ts) under `getDb()`
 | 11 | Adds `foundational_rule_settings.sort_order` (per-account display/run order). Backfills the optimal default order. |
 | 12 | Recreates `transactions` to drop the FK on `applied_rule_id` so synthetic `'foundational:<id>'` IDs can be persisted. Backfills `applied_rule_id` for existing rows that pre-fix code categorized via foundational rules but stored NULL. `deleteRule` now clears `applied_rule_id` in code (replacing the dropped `ON DELETE SET NULL` cascade). |
 | 13 | Adds `categories.exclude_from_totals INTEGER NOT NULL DEFAULT 0`. Transactions in excluded categories are tracked but omitted from income/expense/net summaries; shown in a separate "not counted toward totals" row. |
+| 14 | Adds `targets` table + `idx_targets_account_month` index. Spending Targets feature (v4.9). |
+| 15 | Adds `transactions.source_is_manual INTEGER NOT NULL DEFAULT 0`. Backfills `1` for existing rows whose `import_batch_id LIKE 'manual-%'`. Transaction source tracking + reconciliation feature (v4.9.1). |
 
 **Pre-migration backup**: before any pending migration runs, [`writePreMigrationBackup`](../src/db/client.ts) writes a snapshot of all known tables to `Documents/slo-n-ready-backup.json` so the user can roll back if a migration fails. Don't bypass this.
 
@@ -289,7 +311,7 @@ Backups are written automatically after CSV imports, account changes, and on dem
 
 ```ts
 interface BackupData {
-  version:                    number;       // 1, 2, 3, or 4 — see compatibility below
+  version:                    number;       // 1–5 — see compatibility below
   exported_at:                number;       // ms timestamp
   accounts:                   Account[];
   import_batches:             ImportBatch[];
@@ -299,14 +321,16 @@ interface BackupData {
   budgets:                    Budget[];     // present from v3
   foundational_rule_settings: FoundationalRuleSetting[]; // present from v4
   app_preferences:            AppPreference[];            // present from v4
+  targets?:                   Target[];                   // present from v4.9 (optional)
 }
 ```
 
-**Compatibility** (`readBackupFromPath` accepts v1–v4):
+**Compatibility** (`readBackupFromPath` accepts v1–v5):
 - v1: pre-categories. `categories`/`rules`/`budgets` may be missing.
 - v2: includes categories + rules.
 - v3: adds `budgets`.
-- v4: adds `foundational_rule_settings` and `app_preferences`; `categories` rows gain `emoji` and `description`. **Current.**
+- v4: adds `foundational_rule_settings` and `app_preferences`; `categories` rows gain `emoji` and `description`.
+- v5: adds `targets`; `transactions` rows gain `source_is_manual`. Old backups restored with `source_is_manual ?? 0`; a post-restore `UPDATE … WHERE import_batch_id LIKE 'manual-%'` re-applies the correct flag. **Current.**
 
 `restoreFromData` deletes all rows in FK-safe order (children before parents), then re-inserts everything inside one transaction. Missing fields are backfilled with safe defaults (`suggest_rules ?? 1`, `dropped_at ?? null`, `conditions ?? '[]'`, etc.).
 
