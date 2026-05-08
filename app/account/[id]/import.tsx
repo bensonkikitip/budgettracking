@@ -77,14 +77,17 @@ export default function ImportScreen() {
 
   // ── Test fixture loader (dev builds only) ───────────────────────────────────
 
-  async function loadTestFixture(name: 'sample_onboarding' | 'sample_import') {
+  async function loadTestFixture(name: 'sample_onboarding' | 'sample_import' | 'sample_dedup') {
     if (!__DEV__) return;
     setLoading(true);
     try {
       // require() inside __DEV__ guard — Metro tree-shakes this from prod builds
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { SAMPLE_ONBOARDING_CSV, SAMPLE_IMPORT_CSV } = require('../../../src/test/fixtures');
-      const text: string = name === 'sample_onboarding' ? SAMPLE_ONBOARDING_CSV : SAMPLE_IMPORT_CSV;
+      const { SAMPLE_ONBOARDING_CSV, SAMPLE_IMPORT_CSV, SAMPLE_DEDUP_CSV } = require('../../../src/test/fixtures');
+      const text: string =
+        name === 'sample_onboarding' ? SAMPLE_ONBOARDING_CSV :
+        name === 'sample_dedup'      ? SAMPLE_DEDUP_CSV :
+                                       SAMPLE_IMPORT_CSV;
 
       if (!account) throw new Error('Account not found');
       let columnConfig = parseColumnConfig(account);
@@ -405,6 +408,12 @@ export default function ImportScreen() {
             onPress={() => loadTestFixture('sample_import')}
           >
             <Text style={styles.devFixtureBarText}>Load sample_import.csv</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.devFixtureBarBtn}
+            onPress={() => loadTestFixture('sample_dedup')}
+          >
+            <Text style={styles.devFixtureBarText}>Load sample_dedup.csv</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.devFixtureBarBtn}

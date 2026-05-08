@@ -1,0 +1,46 @@
+appId: com.kiip.slonready
+---
+# Tests the cross-import duplicate detection flow.
+#
+# Setup: onboarding imports Feb 2026 data including "NETFLIX.COM LOS GATOS CA"
+# ($15.49 on 2026-02-12).  sample_dedup.csv imports "NETFLIX STREAMING SVC"
+# ($15.49 on 2026-02-12) — same amount, same date, different description, so
+# INSERT OR IGNORE lets it through but findCrossImportDuplicates flags it.
+#
+# Precondition: onboarding done with Feb 2026 data.
+- runFlow: "onboarding_new_user.yaml"
+
+# ── Screen: account/[id] — import a second batch that overlaps ────────────────
+- tapOn: "Import"
+
+# ── Screen: import/pick ───────────────────────────────────────────────────────
+- assertVisible: "Choose CSV File…"
+- tapOn: "Load sample_dedup.csv"
+
+# ── Screen: import/preview ───────────────────────────────────────────────────
+- assertVisible: "1 transaction found"
+- tapOn: "Import 1 Transaction"
+
+# ── Screen: import/done ───────────────────────────────────────────────────────
+- assertVisible: "All done — nice work!"
+# The "⚠️ Overlapping imports" CTA card appears because dedupCount = 1.
+- assertVisible: "Overlapping imports"
+- assertVisible: "1 row"
+- tapOn: "Review →"
+
+# ── Screen: import-dedup — review duplicate pairs ────────────────────────────
+- assertVisible: "Review Duplicates"
+# The pair shows side-by-side: new import vs prior import tags.
+- assertVisible: "New import"
+- assertVisible: "Prior import"
+
+# ── Dismiss with "Keep both" (no DB write) ────────────────────────────────────
+- tapOn: "Keep both"
+
+# ── Empty state — all pairs resolved ─────────────────────────────────────────
+- assertVisible: "All clear!"
+- tapOn: "Done"
+
+# ── Back on import done screen ────────────────────────────────────────────────
+- tapOn: "Back to Account"
+- assertVisible: "Chase Freedom"

@@ -34,3 +34,15 @@ export const SAMPLE_IMPORT_CSV = [
   'Pending,03/09/2026,"TST* LOCAL CAFE SANTA BARBARA CA",14.30,,TEST USER',
   'Pending,03/08/2026,"SPROUTS FARMERS MKT GOLETA CA",41.75,,TEST USER',
 ].join('\n');
+
+/**
+ * One-row fixture that creates a near-duplicate of a row already imported by
+ * SAMPLE_ONBOARDING_CSV: same amount ($15.49), same date (02/12/2026), but a
+ * different description so the SHA-256 ID differs and INSERT OR IGNORE lets it
+ * through.  After importing this on top of the onboarding data,
+ * findCrossImportDuplicates returns 1 pair — used by import_dedup_flow.yaml.
+ */
+export const SAMPLE_DEDUP_CSV = [
+  'Status,Date,Description,Debit,Credit,Member Name',
+  'Cleared,02/12/2026,"NETFLIX STREAMING SVC",15.49,,TEST USER',
+].join('\n');

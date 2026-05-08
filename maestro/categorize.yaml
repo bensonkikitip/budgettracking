@@ -8,13 +8,24 @@ appId: com.kiip.slonready
 # TransactionRow has accessibilityLabel={description} so tap the full description.
 - tapOn: "COSTCO WHSE #0474 GOLETA CA"
 
+# ── Screen: tx-edit — category picker ─────────────────────────────────────────
+# Tapping a transaction now navigates to the edit screen (title = "Edit Transaction").
+- assertVisible: "Edit Transaction"
+
+# Open the category picker by tapping the category row.
+# TouchableOpacity has accessibilityLabel="Change category".
+- tapOn: "Change category"
+
 # ── CategoryPickerSheet opens ─────────────────────────────────────────────────
 # The starter categories from onboarding are in the list.
 - assertVisible: "Groceries"
 - tapOn: "Groceries"
 
-# ── Alert: "Create a rule?" (suggest_rules is on by default) ─────────────────
-- tapOn: "No thanks"
+# ── Back on tx-edit — "Save Changes" button is visible ───────────────────────
+# The picker closed; Groceries is selected as the category.
+# No rule-suggestion alert fires from tx-edit (autoApplyRulesForAccount is silent).
+- assertVisible: "Save Changes"
+- tapOn: "Save Changes"
 
 # ── Back on account detail — COSTCO WHSE now shows the Groceries badge ────────
 # TransactionRow accessibilityLabel = "{description}, {categoryName}" when categorized.
